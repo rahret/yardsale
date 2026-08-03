@@ -19,7 +19,7 @@ export default async function DashboardLayout({
     <div className="min-h-screen">
       <div className="flex items-center justify-between px-5 py-4 border-b-2 border-cardboard-dark bg-white">
         <a href="/dashboard" className="font-marker text-2xl text-marker -rotate-1 inline-block">
-          Garage Sale HQ
+          Yard Sale QR
         </a>
         <form action="/auth/signout" method="post">
           <button
