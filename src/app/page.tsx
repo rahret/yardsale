@@ -12,7 +12,7 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="max-w-md text-center">
-        <div className="font-marker text-5xl text-marker -rotate-1 mb-3">Garage Sale HQ</div>
+        <div className="font-marker text-5xl text-marker -rotate-1 mb-3">Yard Sale QR</div>
         <p className="text-base opacity-75 mb-8">
           Build a mobile-friendly garage sale page in minutes. Print a QR code, let buyers browse
           and reserve items in real time, and track what sold — all from your phone.
