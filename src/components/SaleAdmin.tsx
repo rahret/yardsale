@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleStatus } from "@/lib/types";
-import { EMOJI_PRESETS, money } from "@/lib/utils";
+import { EMOJI_PRESETS, money, siteOrigin } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 
 const STATUS_OPTIONS: { value: SaleStatus; label: string; hint: string }[] = [
@@ -31,7 +31,7 @@ export default function SaleAdmin({ sale: initialSale, initialItems }: { sale: S
   });
   const [savingSale, setSavingSale] = useState(false);
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "");
+  const siteUrl = siteOrigin(typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = `${siteUrl}/s/${sale.slug}`;
 
   const stats = useMemo(() => {
