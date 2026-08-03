@@ -9,6 +9,13 @@ export function normalizePhone(p: string | null | undefined): string {
   return (p || "").replace(/\D/g, "");
 }
 
+/** Strips any trailing slash(es) so combining this with `/s/${slug}` never
+ * produces a double slash, regardless of how NEXT_PUBLIC_SITE_URL was set. */
+export function siteOrigin(fallback = ""): string {
+  const raw = process.env.NEXT_PUBLIC_SITE_URL || fallback;
+  return raw.replace(/\/+$/, "");
+}
+
 export function slugify(input: string): string {
   return input
     .toLowerCase()
