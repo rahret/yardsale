@@ -1,0 +1,36 @@
+@import url("https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Work+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: #fbf8f2;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(51, 49, 46, 0.06) 1px,
+    transparent 0
+  );
+  background-size: 22px 22px;
+  color: #33312e;
+}
+
+@keyframes slideup {
+  from {
+    transform: translateY(24px);
+    opacity: 0.5;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slideup {
+  animation: slideup 0.18s ease;
+}
