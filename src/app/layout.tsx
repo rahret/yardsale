@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Garage Sale HQ",
+  title: "Yard Sale QR",
   description: "Create and manage your own garage sale, share it with a QR code, and let buyers reserve items in real time.",
 };
 
