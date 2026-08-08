@@ -18,7 +18,7 @@ export default function ShopView({
   saleDays: SaleDay[];
 }) {
   const [items, setItems] = useState<Item[]>(initialItems);
-  const [filterCat, setFilterCat] = useState("all");
+  const [filterCats, setFilterCats] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>("newest");
   const [showSold, setShowSold] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -55,14 +55,14 @@ export default function ShopView({
 
   const visible = useMemo(() => {
     let arr = items.slice();
-    if (filterCat !== "all") arr = arr.filter((i) => i.category === filterCat);
+    if (filterCats.length > 0) arr = arr.filter((i) => filterCats.includes(i.category));
     if (!showSold) arr = arr.filter((i) => i.status !== "sold");
     if (sort === "price-asc") arr.sort((a, b) => a.price - b.price);
     else if (sort === "price-desc") arr.sort((a, b) => b.price - a.price);
     else if (sort === "name") arr.sort((a, b) => a.name.localeCompare(b.name));
     else arr.sort((a, b) => (b.created_at > a.created_at ? 1 : -1));
     return arr;
-  }, [items, filterCat, showSold, sort]);
+  }, [items, filterCats, showSold, sort]);
 
   const selected = items.find((i) => i.id === selectedId) || null;
   const availableCount = items.filter((i) => i.status === "available").length;
@@ -114,15 +114,8 @@ export default function ShopView({
       </div>
 
       <div className="px-5 pb-4 flex flex-wrap items-center gap-2">
-        <div className="flex gap-1.5 flex-wrap flex-1">
-          <Chip active={filterCat === "all"} onClick={() => setFilterCat("all")}>
-            All
-          </Chip>
-          {categories.map((c) => (
-            <Chip key={c} active={filterCat === c} onClick={() => setFilterCat(c)}>
-              {c}
-            </Chip>
-          ))}
+        <div className="flex-1">
+          <CategoryFilter categories={categories} selected={filterCats} onChange={setFilterCats} />
         </div>
         <select
           value={sort}
@@ -176,16 +169,78 @@ function EmptyScreen({ title, body }: { title: string; body: string }) {
   );
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function CategoryFilter({
+  categories,
+  selected,
+  onChange,
+}: {
+  categories: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent | TouchEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [open]);
+
+  function toggle(c: string) {
+    onChange(selected.includes(c) ? selected.filter((x) => x !== c) : [...selected, c]);
+  }
+
+  const label =
+    selected.length === 0 ? "All categories" : selected.length === 1 ? selected[0] : `${selected.length} categories`;
+
   return (
-    <button
-      onClick={onClick}
-      className={`text-xs font-bold px-3 py-1.5 rounded-full border-2 ${
-        active ? "bg-ink border-ink text-chalk" : "border-cardboard-dark bg-chalk opacity-70"
-      }`}
-    >
-      {children}
-    </button>
+    <div className="relative inline-block" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border-2 ${
+          selected.length > 0 ? "bg-ink border-ink text-chalk" : "border-cardboard-dark bg-chalk opacity-70"
+        }`}
+      >
+        {label}
+        <span className="text-[10px]">▾</span>
+      </button>
+      {open && (
+        <div className="absolute z-20 top-full left-0 mt-1.5 bg-white border-2 border-cardboard-dark rounded-lg shadow-tag p-2 min-w-[190px] max-h-64 overflow-y-auto">
+          {categories.length === 0 ? (
+            <div className="text-xs opacity-60 px-2 py-1">No categories yet.</div>
+          ) : (
+            categories.map((c) => (
+              <label
+                key={c}
+                className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-chalk cursor-pointer"
+              >
+                <input type="checkbox" checked={selected.includes(c)} onChange={() => toggle(c)} />
+                {c}
+              </label>
+            ))
+          )}
+          <div className="border-t border-chalk-dim mt-1 pt-1">
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              disabled={selected.length === 0}
+              className="w-full text-left px-2 py-1.5 text-xs font-bold opacity-70 disabled:opacity-30"
+            >
+              Clear filter
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
