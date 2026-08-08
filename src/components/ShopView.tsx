@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale } from "@/lib/types";
-import { categoriesOf, fmtMMSS, money, reservationDeadline } from "@/lib/utils";
+import { categoriesOf, fmtMMSS, formatSaleSchedule, mapsUrl, money, reservationDeadline } from "@/lib/utils";
 import { photoUrl } from "@/components/PhotoUploader";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
@@ -75,6 +75,21 @@ export default function ShopView({ sale, initialItems }: { sale: Sale; initialIt
         <div>
           <div className="font-marker text-3xl text-marker -rotate-1 inline-block">{sale.name}</div>
           <div className="text-sm opacity-65 mt-1.5">{sale.tagline}</div>
+          {sale.address && (
+            <a
+              href={mapsUrl(sale.address)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-sm font-semibold text-grass-dark mt-1.5 underline underline-offset-2"
+            >
+              📍 {sale.address}
+            </a>
+          )}
+          {(sale.starts_at || sale.ends_at) && (
+            <div className="text-xs opacity-70 mt-1 font-semibold">
+              🗓️ {formatSaleSchedule(sale.starts_at, sale.ends_at)}
+            </div>
+          )}
           {sale.status === "live" ? (
             <div className="inline-block mt-2 text-xs font-bold text-grass-dark bg-grass/15 border border-grass/40 rounded-full px-3 py-1">
               🟢 {availableCount} item{availableCount === 1 ? "" : "s"} available

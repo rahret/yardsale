@@ -52,11 +52,19 @@ create table if not exists public.sales (
   slug text not null unique,
   name text not null default 'My Garage Sale',
   tagline text not null default 'everything must go — cash or Venmo',
+  address text not null default '',
+  starts_at timestamptz,
+  ends_at timestamptz,
   default_reservation_minutes int not null default 30,
   status text not null default 'draft' check (status in ('draft', 'live', 'ended')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- backfill for databases created before these columns existed
+alter table public.sales add column if not exists address text not null default '';
+alter table public.sales add column if not exists starts_at timestamptz;
+alter table public.sales add column if not exists ends_at timestamptz;
 
 create index if not exists sales_owner_id_idx on public.sales (owner_id);
 
@@ -80,6 +88,37 @@ create policy "Owners can update their own sales"
 
 create policy "Owners can delete their own sales"
   on public.sales for delete
+  using (auth.uid() = owner_id);
+
+-- ----------------------------------------------------------------------------
+-- saved_locations: addresses a seller has saved for quick reuse across sales
+-- ----------------------------------------------------------------------------
+create table if not exists public.saved_locations (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users (id) on delete cascade,
+  label text not null default '',
+  address text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists saved_locations_owner_id_idx on public.saved_locations (owner_id);
+
+alter table public.saved_locations enable row level security;
+
+create policy "Owners can view their own saved locations"
+  on public.saved_locations for select
+  using (auth.uid() = owner_id);
+
+create policy "Owners can insert their own saved locations"
+  on public.saved_locations for insert
+  with check (auth.uid() = owner_id);
+
+create policy "Owners can update their own saved locations"
+  on public.saved_locations for update
+  using (auth.uid() = owner_id);
+
+create policy "Owners can delete their own saved locations"
+  on public.saved_locations for delete
   using (auth.uid() = owner_id);
 
 -- ----------------------------------------------------------------------------
@@ -202,6 +241,7 @@ grant select, update on public.profiles to anon, authenticated;
 grant select, insert, update, delete on public.sales to anon, authenticated;
 grant select, insert, update, delete on public.items to anon, authenticated;
 grant select, insert, update, delete on public.item_photos to anon, authenticated;
+grant select, insert, update, delete on public.saved_locations to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- keep updated_at fresh

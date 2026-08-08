@@ -7,10 +7,21 @@ export interface Sale {
   slug: string;
   name: string;
   tagline: string;
+  address: string;
+  starts_at: string | null;
+  ends_at: string | null;
   default_reservation_minutes: number;
   status: SaleStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface SavedLocation {
+  id: string;
+  owner_id: string;
+  label: string;
+  address: string;
+  created_at: string;
 }
 
 export interface ItemPhoto {

@@ -17,5 +17,11 @@ export default async function SaleAdminPage({ params }: { params: { saleId: stri
     .eq("sale_id", params.saleId)
     .order("created_at", { ascending: false });
 
-  return <SaleAdmin sale={sale} initialItems={items || []} />;
+  const { data: savedLocations } = await supabase
+    .from("saved_locations")
+    .select("*")
+    .eq("owner_id", sale.owner_id)
+    .order("created_at", { ascending: false });
+
+  return <SaleAdmin sale={sale} initialItems={items || []} initialSavedLocations={savedLocations || []} />;
 }

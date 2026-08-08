@@ -3,9 +3,22 @@
 import { useMemo, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
-import type { Item, Sale, SaleStatus } from "@/lib/types";
+import type { Item, Sale, SaleStatus, SavedLocation } from "@/lib/types";
 import { EMOJI_PRESETS, money, siteOrigin } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
+
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInput(val: string): string | null {
+  if (!val) return null;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
 
 const STATUS_OPTIONS: { value: SaleStatus; label: string; hint: string }[] = [
   { value: "draft", label: "Draft", hint: "Only you can see it while you set it up." },
@@ -15,7 +28,15 @@ const STATUS_OPTIONS: { value: SaleStatus; label: string; hint: string }[] = [
 
 const emptyForm = { name: "", price: "", category: "", description: "", reservationMinutes: "", icon: "📦" };
 
-export default function SaleAdmin({ sale: initialSale, initialItems }: { sale: Sale; initialItems: Item[] }) {
+export default function SaleAdmin({
+  sale: initialSale,
+  initialItems,
+  initialSavedLocations,
+}: {
+  sale: Sale;
+  initialItems: Item[];
+  initialSavedLocations: SavedLocation[];
+}) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
   const [form, setForm] = useState(emptyForm);
@@ -27,9 +48,15 @@ export default function SaleAdmin({ sale: initialSale, initialItems }: { sale: S
   const [saleForm, setSaleForm] = useState({
     name: sale.name,
     tagline: sale.tagline,
+    address: sale.address,
+    starts_at: toLocalInput(sale.starts_at),
+    ends_at: toLocalInput(sale.ends_at),
     default_reservation_minutes: String(sale.default_reservation_minutes),
   });
   const [savingSale, setSavingSale] = useState(false);
+  const [savedLocations, setSavedLocations] = useState<SavedLocation[]>(initialSavedLocations);
+  const [locationLabel, setLocationLabel] = useState("");
+  const [savingLocation, setSavingLocation] = useState(false);
 
   const siteUrl = siteOrigin(typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = `${siteUrl}/s/${sale.slug}`;
@@ -57,11 +84,41 @@ export default function SaleAdmin({ sale: initialSale, initialItems }: { sale: S
     const patch = {
       name: saleForm.name.trim() || sale.name,
       tagline: saleForm.tagline.trim(),
+      address: saleForm.address.trim(),
+      starts_at: fromLocalInput(saleForm.starts_at),
+      ends_at: fromLocalInput(saleForm.ends_at),
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
     };
     const { data, error } = await supabase.from("sales").update(patch).eq("id", sale.id).select().single();
     setSavingSale(false);
     if (!error && data) setSale(data);
+  }
+
+  function selectSavedLocation(loc: SavedLocation) {
+    setSaleForm((prev) => ({ ...prev, address: loc.address }));
+  }
+
+  async function saveCurrentLocation() {
+    const address = saleForm.address.trim();
+    if (!address) return;
+    setSavingLocation(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("saved_locations")
+      .insert({ owner_id: sale.owner_id, label: locationLabel.trim(), address })
+      .select()
+      .single();
+    setSavingLocation(false);
+    if (!error && data) {
+      setSavedLocations((prev) => [data, ...prev]);
+      setLocationLabel("");
+    }
+  }
+
+  async function deleteSavedLocation(id: string) {
+    const supabase = createClient();
+    const { error } = await supabase.from("saved_locations").delete().eq("id", id);
+    if (!error) setSavedLocations((prev) => prev.filter((l) => l.id !== id));
   }
 
   async function setSaleStatus(status: SaleStatus) {
@@ -239,6 +296,81 @@ export default function SaleAdmin({ sale: initialSale, initialItems }: { sale: S
             className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
           />
         </Field>
+        <Field label="Address">
+          <textarea
+            value={saleForm.address}
+            onChange={(e) => setSaleForm({ ...saleForm, address: e.target.value })}
+            placeholder="123 Main St, Springfield"
+            className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg min-h-[50px]"
+          />
+        </Field>
+
+        {savedLocations.length > 0 && (
+          <div className="mb-2.5">
+            <label className="block text-xs font-bold opacity-70 mb-1">Saved locations</label>
+            <div className="flex gap-1.5 flex-wrap">
+              {savedLocations.map((loc) => (
+                <div
+                  key={loc.id}
+                  className="flex items-center gap-1 border-2 border-cardboard-dark bg-white rounded-lg pl-2.5 pr-1 py-1"
+                >
+                  <button
+                    type="button"
+                    onClick={() => selectSavedLocation(loc)}
+                    className="text-xs font-bold text-left max-w-[180px] truncate"
+                    title={loc.address}
+                  >
+                    {loc.label || loc.address}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteSavedLocation(loc.id)}
+                    className="text-xs opacity-50 hover:opacity-90 px-1"
+                    aria-label="Delete saved location"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2 mb-2.5">
+          <input
+            value={locationLabel}
+            onChange={(e) => setLocationLabel(e.target.value)}
+            placeholder="Label (optional)"
+            className="flex-1 px-3 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
+          />
+          <button
+            type="button"
+            onClick={saveCurrentLocation}
+            disabled={savingLocation || !saleForm.address.trim()}
+            className="border-2 border-cardboard-dark bg-white font-bold px-3 rounded-lg text-sm disabled:opacity-50"
+          >
+            {savingLocation ? "Saving…" : "💾 Save location"}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Sale starts">
+            <input
+              type="datetime-local"
+              value={saleForm.starts_at}
+              onChange={(e) => setSaleForm({ ...saleForm, starts_at: e.target.value })}
+              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+            />
+          </Field>
+          <Field label="Sale ends">
+            <input
+              type="datetime-local"
+              value={saleForm.ends_at}
+              onChange={(e) => setSaleForm({ ...saleForm, ends_at: e.target.value })}
+              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+            />
+          </Field>
+        </div>
         <Field label="Default reservation window (minutes)">
           <input
             type="number"
