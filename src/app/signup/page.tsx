@@ -60,7 +60,7 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-white border-2 border-cardboard-dark rounded-2xl p-7 shadow-tag">
-        <div className="font-marker text-3xl text-marker -rotate-1 mb-1">Garage Sale HQ</div>
+        <div className="font-marker text-3xl text-marker -rotate-1 mb-1">Yard Sale QR</div>
         <p className="text-sm opacity-70 mb-6">Create an account to build your own sale.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
