@@ -1,4 +1,4 @@
-import type { Item, Sale } from "./types";
+import type { Item, Sale, SaleDay } from "./types";
 
 export function money(n: number | null | undefined): string {
   const v = Number(n) || 0;
@@ -68,31 +68,25 @@ export function mapsUrl(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
-/** Formats a sale's start/end into a single human-readable line, collapsing
- * the end date when it falls on the same day as the start. */
-export function formatSaleSchedule(startsAt: string | null, endsAt: string | null): string {
-  if (!startsAt && !endsAt) return "";
-  const dateOpts: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" };
-  const timeOpts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+/** Formats a "HH:MM" or "HH:MM:SS" time-of-day string (as returned by
+ * Postgres's `time` type) into a locale-formatted clock time. */
+export function formatTime(t: string): string {
+  const [h, m] = t.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
 
-  const start = startsAt ? new Date(startsAt) : null;
-  const end = endsAt ? new Date(endsAt) : null;
+/** Formats one sale_days row into a single human-readable line, e.g.
+ * "Fri, Aug 15 · 10:00 AM – 4:00 PM". */
+export function formatSaleDay(day: SaleDay): string {
+  const date = new Date(day.date + "T00:00:00");
+  const dateStr = date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return `${dateStr} · ${formatTime(day.start_time)} – ${formatTime(day.end_time)}`;
+}
 
-  if (start && end) {
-    const sameDay = start.toDateString() === end.toDateString();
-    if (sameDay) {
-      return `${start.toLocaleDateString(undefined, dateOpts)} · ${start.toLocaleTimeString(
-        undefined,
-        timeOpts
-      )} – ${end.toLocaleTimeString(undefined, timeOpts)}`;
-    }
-    return `${start.toLocaleDateString(undefined, dateOpts)} ${start.toLocaleTimeString(
-      undefined,
-      timeOpts
-    )} – ${end.toLocaleDateString(undefined, dateOpts)} ${end.toLocaleTimeString(undefined, timeOpts)}`;
-  }
-  const only = (start || end)!;
-  return `${only.toLocaleDateString(undefined, dateOpts)} · ${only.toLocaleTimeString(undefined, timeOpts)}`;
+export function sortSaleDays(days: SaleDay[]): SaleDay[] {
+  return [...days].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export const EMOJI_PRESETS = [

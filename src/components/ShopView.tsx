@@ -2,15 +2,23 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Item, Sale } from "@/lib/types";
-import { categoriesOf, fmtMMSS, formatSaleSchedule, mapsUrl, money, reservationDeadline } from "@/lib/utils";
+import type { Item, Sale, SaleDay } from "@/lib/types";
+import { categoriesOf, fmtMMSS, formatSaleDay, mapsUrl, money, reservationDeadline, sortSaleDays } from "@/lib/utils";
 import { photoUrl } from "@/components/PhotoUploader";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
 
-export default function ShopView({ sale, initialItems }: { sale: Sale; initialItems: Item[] }) {
+export default function ShopView({
+  sale,
+  initialItems,
+  saleDays,
+}: {
+  sale: Sale;
+  initialItems: Item[];
+  saleDays: SaleDay[];
+}) {
   const [items, setItems] = useState<Item[]>(initialItems);
-  const [filterCat, setFilterCat] = useState("all");
+  const [filterCats, setFilterCats] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>("newest");
   const [showSold, setShowSold] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -47,17 +55,18 @@ export default function ShopView({ sale, initialItems }: { sale: Sale; initialIt
 
   const visible = useMemo(() => {
     let arr = items.slice();
-    if (filterCat !== "all") arr = arr.filter((i) => i.category === filterCat);
+    if (filterCats.length > 0) arr = arr.filter((i) => filterCats.includes(i.category));
     if (!showSold) arr = arr.filter((i) => i.status !== "sold");
     if (sort === "price-asc") arr.sort((a, b) => a.price - b.price);
     else if (sort === "price-desc") arr.sort((a, b) => b.price - a.price);
     else if (sort === "name") arr.sort((a, b) => a.name.localeCompare(b.name));
     else arr.sort((a, b) => (b.created_at > a.created_at ? 1 : -1));
     return arr;
-  }, [items, filterCat, showSold, sort]);
+  }, [items, filterCats, showSold, sort]);
 
   const selected = items.find((i) => i.id === selectedId) || null;
   const availableCount = items.filter((i) => i.status === "available").length;
+  const sortedDays = useMemo(() => sortSaleDays(saleDays), [saleDays]);
 
   function updateItem(next: Item) {
     setItems((prev) => prev.map((i) => (i.id === next.id ? next : i)));
@@ -72,9 +81,9 @@ export default function ShopView({ sale, initialItems }: { sale: Sale; initialIt
   return (
     <div className="max-w-3xl mx-auto pb-10">
       <div className="px-5 pt-6 pb-4 flex items-start justify-between gap-3">
-        <div>
-          <div className="font-marker text-3xl text-marker -rotate-1 inline-block">{sale.name}</div>
-          <div className="text-sm opacity-65 mt-1.5">{sale.tagline}</div>
+        <div className="min-w-0 flex-1">
+          <div className="font-marker text-3xl text-marker -rotate-1 break-words">{sale.name}</div>
+          <div className="text-sm opacity-65 mt-1.5 break-words">{sale.tagline}</div>
           {sale.address && (
             <a
               href={mapsUrl(sale.address)}
@@ -85,9 +94,11 @@ export default function ShopView({ sale, initialItems }: { sale: Sale; initialIt
               📍 {sale.address}
             </a>
           )}
-          {(sale.starts_at || sale.ends_at) && (
-            <div className="text-xs opacity-70 mt-1 font-semibold">
-              🗓️ {formatSaleSchedule(sale.starts_at, sale.ends_at)}
+          {sortedDays.length > 0 && (
+            <div className="text-xs opacity-70 mt-1 font-semibold space-y-0.5">
+              {sortedDays.map((day) => (
+                <div key={day.id}>🗓️ {formatSaleDay(day)}</div>
+              ))}
             </div>
           )}
           {sale.status === "live" ? (
@@ -103,15 +114,8 @@ export default function ShopView({ sale, initialItems }: { sale: Sale; initialIt
       </div>
 
       <div className="px-5 pb-4 flex flex-wrap items-center gap-2">
-        <div className="flex gap-1.5 flex-wrap flex-1">
-          <Chip active={filterCat === "all"} onClick={() => setFilterCat("all")}>
-            All
-          </Chip>
-          {categories.map((c) => (
-            <Chip key={c} active={filterCat === c} onClick={() => setFilterCat(c)}>
-              {c}
-            </Chip>
-          ))}
+        <div className="flex-1">
+          <CategoryFilter categories={categories} selected={filterCats} onChange={setFilterCats} />
         </div>
         <select
           value={sort}
@@ -165,16 +169,78 @@ function EmptyScreen({ title, body }: { title: string; body: string }) {
   );
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function CategoryFilter({
+  categories,
+  selected,
+  onChange,
+}: {
+  categories: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: MouseEvent | TouchEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [open]);
+
+  function toggle(c: string) {
+    onChange(selected.includes(c) ? selected.filter((x) => x !== c) : [...selected, c]);
+  }
+
+  const label =
+    selected.length === 0 ? "All categories" : selected.length === 1 ? selected[0] : `${selected.length} categories`;
+
   return (
-    <button
-      onClick={onClick}
-      className={`text-xs font-bold px-3 py-1.5 rounded-full border-2 ${
-        active ? "bg-ink border-ink text-chalk" : "border-cardboard-dark bg-chalk opacity-70"
-      }`}
-    >
-      {children}
-    </button>
+    <div className="relative inline-block" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border-2 ${
+          selected.length > 0 ? "bg-ink border-ink text-chalk" : "border-cardboard-dark bg-chalk opacity-70"
+        }`}
+      >
+        {label}
+        <span className="text-[10px]">▾</span>
+      </button>
+      {open && (
+        <div className="absolute z-20 top-full left-0 mt-1.5 bg-white border-2 border-cardboard-dark rounded-lg shadow-tag p-2 min-w-[190px] max-h-64 overflow-y-auto">
+          {categories.length === 0 ? (
+            <div className="text-xs opacity-60 px-2 py-1">No categories yet.</div>
+          ) : (
+            categories.map((c) => (
+              <label
+                key={c}
+                className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-chalk cursor-pointer"
+              >
+                <input type="checkbox" checked={selected.includes(c)} onChange={() => toggle(c)} />
+                {c}
+              </label>
+            ))
+          )}
+          <div className="border-t border-chalk-dim mt-1 pt-1">
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              disabled={selected.length === 0}
+              className="w-full text-left px-2 py-1.5 text-xs font-bold opacity-70 disabled:opacity-30"
+            >
+              Clear filter
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -253,6 +319,7 @@ function DetailSheet({
   const [loading, setLoading] = useState(false);
   const [photoIdx, setPhotoIdx] = useState(0);
   const supabase = useMemo(() => createClient(), []);
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -266,6 +333,27 @@ function DetailSheet({
   }, []);
 
   const photos = item.item_photos || [];
+
+  function prevPhoto() {
+    setPhotoIdx((i) => (i - 1 + photos.length) % photos.length);
+  }
+
+  function nextPhoto() {
+    setPhotoIdx((i) => (i + 1) % photos.length);
+  }
+
+  function onPhotoTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+  }
+
+  function onPhotoTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    const SWIPE_THRESHOLD = 40;
+    if (dx > SWIPE_THRESHOLD) prevPhoto();
+    else if (dx < -SWIPE_THRESHOLD) nextPhoto();
+  }
 
   async function reserve() {
     setError("");
@@ -316,22 +404,35 @@ function DetailSheet({
         <div className="w-9 h-1 bg-cardboard-dark rounded-full mx-auto mb-4" />
 
         {photos.length > 0 ? (
-          <div className="mb-3">
+          <div className="mb-3 relative" onTouchStart={onPhotoTouchStart} onTouchEnd={onPhotoTouchEnd}>
             <img
               src={photoUrl(photos[photoIdx].storage_path)}
               alt=""
-              className="w-full h-56 object-cover rounded-lg border-2 border-cardboard-dark"
+              className="w-full h-56 object-cover rounded-lg border-2 border-cardboard-dark select-none"
+              draggable={false}
             />
             {photos.length > 1 && (
-              <div className="flex gap-1.5 mt-2 justify-center">
-                {photos.map((p, i) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setPhotoIdx(i)}
-                    className={`w-2 h-2 rounded-full ${i === photoIdx ? "bg-ink" : "bg-cardboard-dark"}`}
-                  />
-                ))}
-              </div>
+              <>
+                <button
+                  type="button"
+                  onClick={prevPhoto}
+                  aria-label="Previous photo"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center rounded-full bg-ink/60 text-chalk text-2xl font-bold active:bg-ink/80"
+                >
+                  &lt;
+                </button>
+                <button
+                  type="button"
+                  onClick={nextPhoto}
+                  aria-label="Next photo"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center rounded-full bg-ink/60 text-chalk text-2xl font-bold active:bg-ink/80"
+                >
+                  &gt;
+                </button>
+                <div className="absolute bottom-2 right-2.5 bg-ink/60 text-chalk text-[11px] font-bold px-2 py-0.5 rounded-full">
+                  {photoIdx + 1} / {photos.length}
+                </div>
+              </>
             )}
           </div>
         ) : (

@@ -28,5 +28,11 @@ export default async function PublicSalePage({ params }: { params: { slug: strin
     .eq("sale_id", sale.id)
     .order("created_at", { ascending: false });
 
-  return <ShopView sale={sale} initialItems={items || []} />;
+  const { data: saleDays } = await supabase
+    .from("sale_days")
+    .select("*")
+    .eq("sale_id", sale.id)
+    .order("date", { ascending: true });
+
+  return <ShopView sale={sale} initialItems={items || []} saleDays={saleDays || []} />;
 }

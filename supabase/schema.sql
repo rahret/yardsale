@@ -55,8 +55,6 @@ create table if not exists public.sales (
   name text not null default 'My Garage Sale',
   tagline text not null default 'everything must go — cash or Venmo',
   address text not null default '',
-  starts_at timestamptz,
-  ends_at timestamptz,
   default_reservation_minutes int not null default 30,
   status text not null default 'draft' check (status in ('draft', 'live', 'ended')),
   created_at timestamptz not null default now(),
@@ -65,8 +63,11 @@ create table if not exists public.sales (
 
 -- backfill for databases created before these columns existed
 alter table public.sales add column if not exists address text not null default '';
-alter table public.sales add column if not exists starts_at timestamptz;
-alter table public.sales add column if not exists ends_at timestamptz;
+
+-- starts_at/ends_at (a single date range) were replaced by the sale_days
+-- table below, which supports different hours on different days.
+alter table public.sales drop column if exists starts_at;
+alter table public.sales drop column if exists ends_at;
 
 create index if not exists sales_owner_id_idx on public.sales (owner_id);
 
@@ -96,6 +97,50 @@ drop policy if exists "Owners can delete their own sales" on public.sales;
 create policy "Owners can delete their own sales"
   on public.sales for delete
   using (auth.uid() = owner_id);
+
+-- ----------------------------------------------------------------------------
+-- sale_days: per-day open hours for a sale. Yard sales commonly run 1-4 days
+-- with different hours each day (e.g. Fri 10-4, Sat/Sun 8-12), so hours are
+-- tracked per calendar date rather than as a single start/end range.
+-- ----------------------------------------------------------------------------
+create table if not exists public.sale_days (
+  id uuid primary key default gen_random_uuid(),
+  sale_id uuid not null references public.sales (id) on delete cascade,
+  date date not null,
+  start_time time not null,
+  end_time time not null,
+  created_at timestamptz not null default now(),
+  unique (sale_id, date)
+);
+
+create index if not exists sale_days_sale_id_idx on public.sale_days (sale_id);
+
+alter table public.sale_days enable row level security;
+
+drop policy if exists "Owners can view their own sale days" on public.sale_days;
+create policy "Owners can view their own sale days"
+  on public.sale_days for select
+  using (exists (select 1 from public.sales s where s.id = sale_days.sale_id and s.owner_id = auth.uid()));
+
+drop policy if exists "Public can view days of visible sales" on public.sale_days;
+create policy "Public can view days of visible sales"
+  on public.sale_days for select
+  using (exists (select 1 from public.sales s where s.id = sale_days.sale_id and s.status <> 'draft'));
+
+drop policy if exists "Owners can insert days for their own sales" on public.sale_days;
+create policy "Owners can insert days for their own sales"
+  on public.sale_days for insert
+  with check (exists (select 1 from public.sales s where s.id = sale_days.sale_id and s.owner_id = auth.uid()));
+
+drop policy if exists "Owners can update days for their own sales" on public.sale_days;
+create policy "Owners can update days for their own sales"
+  on public.sale_days for update
+  using (exists (select 1 from public.sales s where s.id = sale_days.sale_id and s.owner_id = auth.uid()));
+
+drop policy if exists "Owners can delete days for their own sales" on public.sale_days;
+create policy "Owners can delete days for their own sales"
+  on public.sale_days for delete
+  using (exists (select 1 from public.sales s where s.id = sale_days.sale_id and s.owner_id = auth.uid()));
 
 -- ----------------------------------------------------------------------------
 -- saved_locations: addresses a seller has saved for quick reuse across sales
@@ -259,6 +304,7 @@ grant usage on schema public to anon, authenticated;
 
 grant select, update on public.profiles to anon, authenticated;
 grant select, insert, update, delete on public.sales to anon, authenticated;
+grant select, insert, update, delete on public.sale_days to anon, authenticated;
 grant select, insert, update, delete on public.items to anon, authenticated;
 grant select, insert, update, delete on public.item_photos to anon, authenticated;
 grant select, insert, update, delete on public.saved_locations to authenticated;
