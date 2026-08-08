@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { QRCodeCanvas } from "qrcode.react";
+import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
 import { EMOJI_PRESETS, formatSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
@@ -836,7 +836,15 @@ export default function SaleAdmin({
         printJob === "qr" &&
         createPortal(
           <div className="hidden print:flex items-center justify-center w-full h-full">
-            <QRCodeCanvas value={shareUrl} size={1200} fgColor="#000000" style={{ width: "7in", height: "7in" }} />
+            {/* SVG (not canvas) so it scales losslessly to whatever page size is
+                picked in Print Setup — sized relative to the printable page
+                itself (vw/vh), not a fixed inch value, so it always fills most
+                of the sheet on Letter, A4, A5, labels, etc. */}
+            <QRCodeSVG
+              value={shareUrl}
+              fgColor="#000000"
+              style={{ width: "min(90vw, 90vh)", height: "min(90vw, 90vh)" }}
+            />
           </div>,
           printRoot
         )}
@@ -856,7 +864,7 @@ export default function SaleAdmin({
                 ))}
               </div>
             )}
-            <QRCodeCanvas value={shareUrl} size={220} fgColor="#000000" />
+            <QRCodeSVG value={shareUrl} fgColor="#000000" style={{ width: "220px", height: "220px" }} />
             <div className="text-lg font-bold">Scan for photos &amp; the full item list!</div>
           </div>,
           printRoot
