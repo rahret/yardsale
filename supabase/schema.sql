@@ -17,10 +17,12 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "Users can view their own profile" on public.profiles;
 create policy "Users can view their own profile"
   on public.profiles for select
   using (auth.uid() = id);
 
+drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile"
   on public.profiles for update
   using (auth.uid() = id);
@@ -70,22 +72,27 @@ create index if not exists sales_owner_id_idx on public.sales (owner_id);
 
 alter table public.sales enable row level security;
 
+drop policy if exists "Owners can view their own sales" on public.sales;
 create policy "Owners can view their own sales"
   on public.sales for select
   using (auth.uid() = owner_id);
 
+drop policy if exists "Public can view non-draft sales" on public.sales;
 create policy "Public can view non-draft sales"
   on public.sales for select
   using (status <> 'draft');
 
+drop policy if exists "Owners can insert their own sales" on public.sales;
 create policy "Owners can insert their own sales"
   on public.sales for insert
   with check (auth.uid() = owner_id);
 
+drop policy if exists "Owners can update their own sales" on public.sales;
 create policy "Owners can update their own sales"
   on public.sales for update
   using (auth.uid() = owner_id);
 
+drop policy if exists "Owners can delete their own sales" on public.sales;
 create policy "Owners can delete their own sales"
   on public.sales for delete
   using (auth.uid() = owner_id);
@@ -105,18 +112,22 @@ create index if not exists saved_locations_owner_id_idx on public.saved_location
 
 alter table public.saved_locations enable row level security;
 
+drop policy if exists "Owners can view their own saved locations" on public.saved_locations;
 create policy "Owners can view their own saved locations"
   on public.saved_locations for select
   using (auth.uid() = owner_id);
 
+drop policy if exists "Owners can insert their own saved locations" on public.saved_locations;
 create policy "Owners can insert their own saved locations"
   on public.saved_locations for insert
   with check (auth.uid() = owner_id);
 
+drop policy if exists "Owners can update their own saved locations" on public.saved_locations;
 create policy "Owners can update their own saved locations"
   on public.saved_locations for update
   using (auth.uid() = owner_id);
 
+drop policy if exists "Owners can delete their own saved locations" on public.saved_locations;
 create policy "Owners can delete their own saved locations"
   on public.saved_locations for delete
   using (auth.uid() = owner_id);
@@ -148,22 +159,27 @@ create index if not exists items_sale_id_idx on public.items (sale_id);
 
 alter table public.items enable row level security;
 
+drop policy if exists "Owners can view their own items" on public.items;
 create policy "Owners can view their own items"
   on public.items for select
   using (exists (select 1 from public.sales s where s.id = items.sale_id and s.owner_id = auth.uid()));
 
+drop policy if exists "Public can view items of visible sales" on public.items;
 create policy "Public can view items of visible sales"
   on public.items for select
   using (exists (select 1 from public.sales s where s.id = items.sale_id and s.status <> 'draft'));
 
+drop policy if exists "Owners can insert items into their own sales" on public.items;
 create policy "Owners can insert items into their own sales"
   on public.items for insert
   with check (exists (select 1 from public.sales s where s.id = items.sale_id and s.owner_id = auth.uid()));
 
+drop policy if exists "Owners can update items in their own sales" on public.items;
 create policy "Owners can update items in their own sales"
   on public.items for update
   using (exists (select 1 from public.sales s where s.id = items.sale_id and s.owner_id = auth.uid()));
 
+drop policy if exists "Owners can delete items in their own sales" on public.items;
 create policy "Owners can delete items in their own sales"
   on public.items for delete
   using (exists (select 1 from public.sales s where s.id = items.sale_id and s.owner_id = auth.uid()));
@@ -187,6 +203,7 @@ create index if not exists item_photos_item_id_idx on public.item_photos (item_i
 
 alter table public.item_photos enable row level security;
 
+drop policy if exists "Owners can view their own item photos" on public.item_photos;
 create policy "Owners can view their own item photos"
   on public.item_photos for select
   using (
@@ -197,6 +214,7 @@ create policy "Owners can view their own item photos"
     )
   );
 
+drop policy if exists "Public can view photos of visible items" on public.item_photos;
 create policy "Public can view photos of visible items"
   on public.item_photos for select
   using (
@@ -207,6 +225,7 @@ create policy "Public can view photos of visible items"
     )
   );
 
+drop policy if exists "Owners can insert photos for their own items" on public.item_photos;
 create policy "Owners can insert photos for their own items"
   on public.item_photos for insert
   with check (
@@ -217,6 +236,7 @@ create policy "Owners can insert photos for their own items"
     )
   );
 
+drop policy if exists "Owners can delete photos for their own items" on public.item_photos;
 create policy "Owners can delete photos for their own items"
   on public.item_photos for delete
   using (
@@ -375,6 +395,7 @@ grant execute on function public.reserve_item(uuid, text, text) to anon, authent
 -- subquery an unqualified `name` resolves to sales.name (innermost scope),
 -- not the uploaded file's path. It must be qualified as objects.name or this
 -- check silently always evaluates false and every upload gets denied.
+drop policy if exists "Owners can upload photos for their own sales" on storage.objects;
 create policy "Owners can upload photos for their own sales"
   on storage.objects for insert
   with check (
@@ -386,6 +407,7 @@ create policy "Owners can upload photos for their own sales"
     )
   );
 
+drop policy if exists "Owners can delete photos for their own sales" on storage.objects;
 create policy "Owners can delete photos for their own sales"
   on storage.objects for delete
   using (
