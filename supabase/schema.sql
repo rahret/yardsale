@@ -355,7 +355,7 @@ create trigger items_set_updated_at before update on public.items
 -- ----------------------------------------------------------------------------
 -- sync_item_status: for bulk items (quantity_total > 1) the status is fully
 -- derived from quantity_available rather than set by hand — sold out once
--- quantity_available hits 0, "low_stock" once it drops under 10% of
+-- quantity_available hits 0, "low_stock" once it drops under 26% of
 -- quantity_total, else available. Runs on insert, on any change to the
 -- quantity columns, and on any attempt to write `status` directly (e.g. a
 -- stale client trying to set a bulk item to "reserved") so the derived value
@@ -373,7 +373,7 @@ begin
       new.sold_at := coalesce(new.sold_at, now());
     else
       new.sold_at := null;
-      if new.quantity_available::numeric / new.quantity_total::numeric < 0.10 then
+      if new.quantity_available::numeric / new.quantity_total::numeric < 0.26 then
         new.status := 'low_stock';
       else
         new.status := 'available';
