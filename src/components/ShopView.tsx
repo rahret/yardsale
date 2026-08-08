@@ -3,7 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay } from "@/lib/types";
-import { categoriesOf, fmtMMSS, formatSaleDay, mapsUrl, money, reservationDeadline, sortSaleDays } from "@/lib/utils";
+import {
+  categoriesOf,
+  fmtMMSS,
+  formatSaleDay,
+  isBulkItem,
+  mapsUrl,
+  money,
+  reservationDeadline,
+  sortSaleDays,
+} from "@/lib/utils";
 import { photoUrl } from "@/components/PhotoUploader";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
@@ -65,7 +74,7 @@ export default function ShopView({
   }, [items, filterCats, showSold, sort]);
 
   const selected = items.find((i) => i.id === selectedId) || null;
-  const availableCount = items.filter((i) => i.status === "available").length;
+  const availableCount = items.filter((i) => i.status === "available" || i.status === "low_stock").length;
   const sortedDays = useMemo(() => sortSaleDays(saleDays), [saleDays]);
 
   function updateItem(next: Item) {
@@ -275,6 +284,9 @@ function Tag({ item, idx, onClick }: { item: Item; idx: number; onClick: () => v
       <div className="p-3 flex flex-col flex-1">
         <div className="text-[10px] uppercase tracking-wide font-bold opacity-55">{item.category}</div>
         <div className="text-sm font-bold leading-tight mt-0.5">{item.name}</div>
+        {isBulkItem(item) && (
+          <div className="text-[10px] font-bold opacity-55 mt-0.5">×{item.quantity_total} available</div>
+        )}
         <div className="flex items-end justify-between flex-wrap gap-x-2 gap-y-1 mt-auto pt-2.5">
           <div className="font-marker text-2xl text-marker leading-none">{money(item.price)}</div>
           <StatusPill item={item} />
@@ -285,10 +297,15 @@ function Tag({ item, idx, onClick }: { item: Item; idx: number; onClick: () => v
 }
 
 function StatusPill({ item }: { item: Item }) {
-  if (item.status === "available") {
+  if (item.status === "sold") {
     return (
-      <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-grass/20 text-grass-dark">
-        ● Available
+      <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-marker/20 text-marker">● Sold</div>
+    );
+  }
+  if (item.status === "low_stock") {
+    return (
+      <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber/20 text-amber">
+        ● Low quantities
       </div>
     );
   }
@@ -298,7 +315,9 @@ function StatusPill({ item }: { item: Item }) {
     );
   }
   return (
-    <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-marker/20 text-marker">● Sold</div>
+    <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-grass/20 text-grass-dark">
+      ● Available
+    </div>
   );
 }
 
@@ -441,12 +460,24 @@ function DetailSheet({
 
         <div className="text-[11px] uppercase tracking-wide font-bold opacity-55 text-center mt-1">{item.category}</div>
         <div className="text-lg font-extrabold text-center my-1">{item.name}</div>
+        {isBulkItem(item) && (
+          <div className="text-xs font-bold opacity-60 text-center mb-1">×{item.quantity_total} available</div>
+        )}
         <div className="font-marker text-4xl text-marker text-center mb-2.5">{money(item.price)}</div>
         {item.description && <p className="text-sm opacity-85 text-center leading-relaxed">{item.description}</p>}
 
         {item.status === "sold" ? (
           <div className="bg-marker/10 border border-marker/30 rounded-lg p-3.5 text-center text-sm mt-3">
             This item has already sold.
+          </div>
+        ) : isBulkItem(item) ? (
+          <div
+            className={`border rounded-lg p-3.5 text-center text-sm mt-3 ${
+              item.status === "low_stock" ? "bg-amber/10 border-amber/30" : "bg-grass/10 border-grass/30"
+            }`}
+          >
+            {item.status === "low_stock" && <div className="font-bold mb-1">Only a few left!</div>}
+            This is a bulk item sold in person — no reservations. Just come by and grab one while they last.
           </div>
         ) : item.status === "reserved" ? (
           <>

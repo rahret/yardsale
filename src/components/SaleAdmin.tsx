@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
-import { EMOJI_PRESETS, money, siteOrigin, sortSaleDays } from "@/lib/utils";
+import { EMOJI_PRESETS, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 
 const MAX_SALE_DAYS = 7;
@@ -26,7 +26,16 @@ const STATUS_OPTIONS: { value: SaleStatus; label: string; hint: string }[] = [
   { value: "ended", label: "Ended", hint: "Public read-only — no new reservations." },
 ];
 
-const emptyForm = { name: "", price: "", category: "", description: "", reservationMinutes: "", icon: "📦" };
+const emptyForm = {
+  name: "",
+  price: "",
+  category: "",
+  description: "",
+  reservationMinutes: "",
+  icon: "📦",
+  isBulk: false,
+  quantity: "",
+};
 
 export default function SaleAdmin({
   sale: initialSale,
@@ -64,13 +73,15 @@ export default function SaleAdmin({
   const shareUrl = `${siteUrl}/s/${sale.slug}`;
 
   const stats = useMemo(() => {
-    const sold = items.filter((i) => i.status === "sold");
-    const revenue = sold.reduce((s, i) => s + (Number(i.price) || 0), 0);
+    const unitsSold = (i: Item) =>
+      isBulkItem(i) ? i.quantity_total - i.quantity_available : i.status === "sold" ? 1 : 0;
+    const revenue = items.reduce((s, i) => s + unitsSold(i) * (Number(i.price) || 0), 0);
     return {
       total: items.length,
       available: items.filter((i) => i.status === "available").length,
       reserved: items.filter((i) => i.status === "reserved").length,
-      sold: sold.length,
+      lowStock: items.filter((i) => i.status === "low_stock").length,
+      sold: items.filter((i) => i.status === "sold").length,
       revenue,
     };
   }, [items]);
@@ -183,6 +194,7 @@ export default function SaleAdmin({
     if (!form.name.trim()) return;
     setAddError("");
     const supabase = createClient();
+    const quantityTotal = form.isBulk ? Math.max(2, Number(form.quantity) || 2) : 1;
     const { data, error } = await supabase
       .from("items")
       .insert({
@@ -191,8 +203,10 @@ export default function SaleAdmin({
         price: Number(form.price) || 0,
         category: form.category.trim() || "Misc",
         description: form.description.trim(),
-        reservation_minutes: form.reservationMinutes ? Number(form.reservationMinutes) : null,
+        reservation_minutes: form.isBulk ? null : form.reservationMinutes ? Number(form.reservationMinutes) : null,
         icon: form.icon || "📦",
+        quantity_total: quantityTotal,
+        quantity_available: quantityTotal,
       })
       .select("*, item_photos(*)")
       .single();
@@ -206,6 +220,7 @@ export default function SaleAdmin({
 
   function startEdit(item: Item) {
     setEditingId(item.id);
+    const bulk = isBulkItem(item);
     setEditForm({
       name: item.name,
       price: String(item.price),
@@ -213,21 +228,31 @@ export default function SaleAdmin({
       description: item.description,
       reservationMinutes: item.reservation_minutes ? String(item.reservation_minutes) : "",
       icon: item.icon,
-      status: item.status,
+      status: item.status === "low_stock" ? "available" : item.status,
+      isBulk: bulk,
+      quantityTotal: String(bulk ? item.quantity_total : 2),
+      quantityAvailable: String(item.quantity_available),
     });
   }
 
   async function saveEdit(id: string) {
     const supabase = createClient();
-    const patch = {
+    const isBulk = editForm.isBulk;
+    const quantityTotal = isBulk ? Math.max(2, Number(editForm.quantityTotal) || 2) : 1;
+    const quantityAvailable = isBulk
+      ? Math.min(quantityTotal, Math.max(0, Number(editForm.quantityAvailable) || 0))
+      : 1;
+    const patch: Record<string, unknown> = {
       name: editForm.name.trim(),
       price: Number(editForm.price) || 0,
       category: editForm.category.trim() || "Misc",
       description: editForm.description,
-      reservation_minutes: editForm.reservationMinutes ? Number(editForm.reservationMinutes) : null,
+      reservation_minutes: isBulk ? null : editForm.reservationMinutes ? Number(editForm.reservationMinutes) : null,
       icon: editForm.icon || "📦",
-      status: editForm.status,
+      quantity_total: quantityTotal,
+      quantity_available: quantityAvailable,
     };
+    if (!isBulk) patch.status = editForm.status;
     const { data, error } = await supabase
       .from("items")
       .update(patch)
@@ -237,6 +262,14 @@ export default function SaleAdmin({
     if (!error && data) {
       setItems((prev) => prev.map((i) => (i.id === id ? data : i)));
       setEditingId(null);
+    }
+  }
+
+  async function adjustQuantity(id: string, delta: number) {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("adjust_item_quantity", { p_item_id: id, p_delta: delta });
+    if (!error && data) {
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...data } : i)));
     }
   }
 
@@ -283,10 +316,11 @@ export default function SaleAdmin({
       <div className="font-marker text-3xl text-marker -rotate-1 mt-2 mb-5 break-words">{sale.name}</div>
 
       {/* stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-5">
         <Stat num={stats.total} label="Items" />
         <Stat num={stats.available} label="Available" />
         <Stat num={stats.reserved} label="Reserved" />
+        <Stat num={stats.lowStock} label="Low qty" />
         <Stat num={stats.sold} label="Sold" />
         <Stat num={money(stats.revenue)} label="Revenue" />
       </div>
@@ -519,17 +553,46 @@ export default function SaleAdmin({
                 className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
               />
             </Field>
-            <Field label="Reservation minutes (optional)">
-              <input
-                type="number"
-                min={1}
-                value={form.reservationMinutes}
-                onChange={(e) => setForm({ ...form, reservationMinutes: e.target.value })}
-                placeholder="uses default"
-                className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
-              />
-            </Field>
+            {form.isBulk ? (
+              <Field label="Starting quantity">
+                <input
+                  type="number"
+                  min={2}
+                  value={form.quantity}
+                  onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                  placeholder="20"
+                  className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+                />
+              </Field>
+            ) : (
+              <Field label="Reservation minutes (optional)">
+                <input
+                  type="number"
+                  min={1}
+                  value={form.reservationMinutes}
+                  onChange={(e) => setForm({ ...form, reservationMinutes: e.target.value })}
+                  placeholder="uses default"
+                  className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+                />
+              </Field>
+            )}
           </div>
+          <label className="flex items-center gap-2 text-xs font-bold opacity-80 mb-2.5">
+            <input
+              type="checkbox"
+              checked={form.isBulk}
+              onChange={(e) =>
+                setForm({ ...form, isBulk: e.target.checked, quantity: e.target.checked ? form.quantity || "2" : "" })
+              }
+            />
+            Sell as a bulk lot (multiple identical items, e.g. 20 books)
+          </label>
+          {form.isBulk && (
+            <div className="text-xs opacity-60 mb-2.5 -mt-1.5">
+              Buyers see it&apos;s available (and when it&apos;s running low) but can&apos;t reserve it — bulk items
+              are first come, first served.
+            </div>
+          )}
           <Field label="Description (optional)">
             <textarea
               value={form.description}
@@ -559,6 +622,12 @@ export default function SaleAdmin({
                   <div className="text-xs opacity-60">
                     {money(item.price)} · {item.category} · <StatusBadge status={item.status} />
                     {item.status === "reserved" && <> · held by {item.reserved_name}</>}
+                    {isBulkItem(item) && (
+                      <>
+                        {" "}
+                        · {item.quantity_available}/{item.quantity_total} left
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -569,7 +638,7 @@ export default function SaleAdmin({
                 <SmallBtn onClick={() => setPhotosOpenId(photosOpenId === item.id ? null : item.id)}>
                   Photos ({item.item_photos?.length || 0})
                 </SmallBtn>
-                {item.status !== "sold" && (
+                {!isBulkItem(item) && item.status !== "sold" && (
                   <SmallBtn dark onClick={() => markSold(item.id)}>
                     Mark sold
                   </SmallBtn>
@@ -583,6 +652,7 @@ export default function SaleAdmin({
                   <SmallBtn onClick={() => setConfirmDeleteId(item.id)}>Delete</SmallBtn>
                 )}
               </div>
+              {isBulkItem(item) && <BulkQuantityControls item={item} onAdjust={adjustQuantity} />}
 
               {photosOpenId === item.id && (
                 <div className="mt-3 bg-chalk rounded-lg p-3">
@@ -625,15 +695,17 @@ export default function SaleAdmin({
                         className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
                       />
                     </Field>
-                    <Field label="Reservation minutes">
-                      <input
-                        type="number"
-                        min={1}
-                        value={editForm.reservationMinutes}
-                        onChange={(e) => setEditForm({ ...editForm, reservationMinutes: e.target.value })}
-                        className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
-                      />
-                    </Field>
+                    {!editForm.isBulk && (
+                      <Field label="Reservation minutes">
+                        <input
+                          type="number"
+                          min={1}
+                          value={editForm.reservationMinutes}
+                          onChange={(e) => setEditForm({ ...editForm, reservationMinutes: e.target.value })}
+                          className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+                        />
+                      </Field>
+                    )}
                   </div>
                   <Field label="Icon (emoji fallback)">
                     <input
@@ -649,17 +721,48 @@ export default function SaleAdmin({
                       className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
                     />
                   </Field>
-                  <Field label="Status">
-                    <select
-                      value={editForm.status}
-                      onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                      className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
-                    >
-                      <option value="available">available</option>
-                      <option value="reserved">reserved</option>
-                      <option value="sold">sold</option>
-                    </select>
-                  </Field>
+                  <label className="flex items-center gap-2 text-xs font-bold opacity-80">
+                    <input
+                      type="checkbox"
+                      checked={editForm.isBulk}
+                      onChange={(e) => setEditForm({ ...editForm, isBulk: e.target.checked })}
+                    />
+                    Bulk lot (multiple identical items)
+                  </label>
+                  {editForm.isBulk ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Field label="Starting quantity">
+                        <input
+                          type="number"
+                          min={2}
+                          value={editForm.quantityTotal}
+                          onChange={(e) => setEditForm({ ...editForm, quantityTotal: e.target.value })}
+                          className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+                        />
+                      </Field>
+                      <Field label="Currently available">
+                        <input
+                          type="number"
+                          min={0}
+                          value={editForm.quantityAvailable}
+                          onChange={(e) => setEditForm({ ...editForm, quantityAvailable: e.target.value })}
+                          className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+                        />
+                      </Field>
+                    </div>
+                  ) : (
+                    <Field label="Status">
+                      <select
+                        value={editForm.status}
+                        onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                        className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+                      >
+                        <option value="available">available</option>
+                        <option value="reserved">reserved</option>
+                        <option value="sold">sold</option>
+                      </select>
+                    </Field>
+                  )}
                   <button
                     onClick={() => saveEdit(item.id)}
                     className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm"
@@ -731,8 +834,45 @@ function StatusBadge({ status }: { status: Item["status"] }) {
     available: "text-grass-dark",
     reserved: "text-amber",
     sold: "text-marker",
+    low_stock: "text-amber",
   };
-  return <span className={`font-bold ${map[status]}`}>{status}</span>;
+  const label = status === "low_stock" ? "low quantities" : status;
+  return <span className={`font-bold ${map[status]}`}>{label}</span>;
+}
+
+function BulkQuantityControls({
+  item,
+  onAdjust,
+}: {
+  item: Item;
+  onAdjust: (id: string, delta: number) => void;
+}) {
+  const [n, setN] = useState("1");
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-2 bg-chalk rounded-lg p-2">
+      <span className="text-xs font-bold opacity-70 mr-1">
+        {item.quantity_available} / {item.quantity_total} left
+      </span>
+      <SmallBtn onClick={() => onAdjust(item.id, -1)}>− sold 1</SmallBtn>
+      <SmallBtn onClick={() => onAdjust(item.id, 1)}>+ restock 1</SmallBtn>
+      <input
+        type="number"
+        min={1}
+        value={n}
+        onChange={(e) => setN(e.target.value)}
+        className="w-16 px-2 py-1.5 border-2 border-cardboard-dark rounded-lg text-xs bg-white"
+      />
+      <SmallBtn
+        dark
+        onClick={() => {
+          const qty = Math.max(1, Number(n) || 1);
+          onAdjust(item.id, -qty);
+        }}
+      >
+        Record sale
+      </SmallBtn>
+    </div>
+  );
 }
 
 function Thumb({ item }: { item: Item }) {
