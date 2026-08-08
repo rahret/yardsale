@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
-import { EMOJI_PRESETS, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
+import { EMOJI_PRESETS, formatSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 
 const MAX_SALE_DAYS = 7;
@@ -68,9 +68,28 @@ export default function SaleAdmin({
   const [locationLabel, setLocationLabel] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
   const [dayRows, setDayRows] = useState<DayRow[]>(toDayRows(initialSaleDays));
+  const [printJob, setPrintJob] = useState<"qr" | "sign" | null>(null);
 
   const siteUrl = siteOrigin(typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = `${siteUrl}/s/${sale.slug}`;
+
+  const sortedDayRows = useMemo(
+    () => [...dayRows].filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date)),
+    [dayRows]
+  );
+
+  useEffect(() => {
+    if (!printJob) return;
+    const t = setTimeout(() => window.print(), 60);
+    function onAfterPrint() {
+      setPrintJob(null);
+    }
+    window.addEventListener("afterprint", onAfterPrint);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("afterprint", onAfterPrint);
+    };
+  }, [printJob]);
 
   const stats = useMemo(() => {
     const unitsSold = (i: Item) =>
@@ -356,12 +375,34 @@ export default function SaleAdmin({
           </button>
         </div>
         <div className="flex items-center gap-4 flex-wrap">
-          <div className="bg-white p-2 rounded-lg border-2 border-cardboard-dark">
+          <button
+            type="button"
+            onClick={() => setPrintJob("qr")}
+            className="bg-white p-2 rounded-lg border-2 border-cardboard-dark cursor-pointer"
+            title="Click to print this QR code"
+          >
             <QRCodeCanvas value={shareUrl} size={120} fgColor="#33312E" />
-          </div>
+          </button>
           <div className="text-xs opacity-70 flex-1 min-w-[160px]">
-            Print this QR code on your signs. It always points to the link above.
+            Click the QR code, or use the buttons below, to print it for your signs. It always points to the link
+            above.
           </div>
+        </div>
+        <div className="flex gap-2 flex-wrap mt-3">
+          <button
+            type="button"
+            onClick={() => setPrintJob("qr")}
+            className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm"
+          >
+            🖨️ Print QR code
+          </button>
+          <button
+            type="button"
+            onClick={() => setPrintJob("sign")}
+            className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm shadow-tag"
+          >
+            🪧 Create sign
+          </button>
         </div>
       </Card>
 
@@ -775,6 +816,35 @@ export default function SaleAdmin({
           ))}
         </div>
       </Card>
+
+      {printJob === "qr" && (
+        <div className="hidden print:block print-area p-10 text-center">
+          <div className="text-3xl font-extrabold mb-6">{sale.name}</div>
+          <div className="flex justify-center mb-6">
+            <QRCodeCanvas value={shareUrl} size={280} fgColor="#000000" />
+          </div>
+          <div className="text-xl font-semibold">Scan to see photos &amp; prices</div>
+          <div className="text-sm opacity-70 mt-2">{shareUrl}</div>
+        </div>
+      )}
+
+      {printJob === "sign" && (
+        <div className="hidden print:flex print-area p-10 flex-col items-center justify-center text-center gap-5">
+          <div className="text-7xl font-extrabold uppercase tracking-wide">Yard Sale</div>
+          <div className="text-3xl font-bold">{sale.name}</div>
+          {sale.tagline && <div className="text-xl italic opacity-80">{sale.tagline}</div>}
+          {sale.address && <div className="text-2xl font-semibold">📍 {sale.address}</div>}
+          {sortedDayRows.length > 0 && (
+            <div className="text-xl font-semibold space-y-1">
+              {sortedDayRows.map((d) => (
+                <div key={d.key}>{formatSaleDay(d)}</div>
+              ))}
+            </div>
+          )}
+          <QRCodeCanvas value={shareUrl} size={220} fgColor="#000000" />
+          <div className="text-lg font-bold">Scan for photos &amp; the full item list!</div>
+        </div>
+      )}
     </div>
   );
 }

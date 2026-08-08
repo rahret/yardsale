@@ -83,7 +83,7 @@ export function formatTime(t: string): string {
 
 /** Formats one sale_days row into a single human-readable line, e.g.
  * "Fri, Aug 15 · 10:00 AM – 4:00 PM". */
-export function formatSaleDay(day: SaleDay): string {
+export function formatSaleDay(day: Pick<SaleDay, "date" | "start_time" | "end_time">): string {
   const date = new Date(day.date + "T00:00:00");
   const dateStr = date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   return `${dateStr} · ${formatTime(day.start_time)} – ${formatTime(day.end_time)}`;

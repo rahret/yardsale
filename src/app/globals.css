@@ -34,3 +34,24 @@ body {
 .animate-slideup {
   animation: slideup 0.18s ease;
 }
+
+@media print {
+  @page {
+    margin: 0.5in;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+
+  .print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+}
