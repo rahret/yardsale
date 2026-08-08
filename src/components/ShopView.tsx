@@ -319,6 +319,7 @@ function DetailSheet({
   const [loading, setLoading] = useState(false);
   const [photoIdx, setPhotoIdx] = useState(0);
   const supabase = useMemo(() => createClient(), []);
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -332,6 +333,27 @@ function DetailSheet({
   }, []);
 
   const photos = item.item_photos || [];
+
+  function prevPhoto() {
+    setPhotoIdx((i) => (i - 1 + photos.length) % photos.length);
+  }
+
+  function nextPhoto() {
+    setPhotoIdx((i) => (i + 1) % photos.length);
+  }
+
+  function onPhotoTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+  }
+
+  function onPhotoTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    const SWIPE_THRESHOLD = 40;
+    if (dx > SWIPE_THRESHOLD) prevPhoto();
+    else if (dx < -SWIPE_THRESHOLD) nextPhoto();
+  }
 
   async function reserve() {
     setError("");
@@ -382,22 +404,35 @@ function DetailSheet({
         <div className="w-9 h-1 bg-cardboard-dark rounded-full mx-auto mb-4" />
 
         {photos.length > 0 ? (
-          <div className="mb-3">
+          <div className="mb-3 relative" onTouchStart={onPhotoTouchStart} onTouchEnd={onPhotoTouchEnd}>
             <img
               src={photoUrl(photos[photoIdx].storage_path)}
               alt=""
-              className="w-full h-56 object-cover rounded-lg border-2 border-cardboard-dark"
+              className="w-full h-56 object-cover rounded-lg border-2 border-cardboard-dark select-none"
+              draggable={false}
             />
             {photos.length > 1 && (
-              <div className="flex gap-1.5 mt-2 justify-center">
-                {photos.map((p, i) => (
-                  <button
-                    key={p.id}
-                    onClick={() => setPhotoIdx(i)}
-                    className={`w-2 h-2 rounded-full ${i === photoIdx ? "bg-ink" : "bg-cardboard-dark"}`}
-                  />
-                ))}
-              </div>
+              <>
+                <button
+                  type="button"
+                  onClick={prevPhoto}
+                  aria-label="Previous photo"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center rounded-full bg-ink/60 text-chalk text-2xl font-bold active:bg-ink/80"
+                >
+                  &lt;
+                </button>
+                <button
+                  type="button"
+                  onClick={nextPhoto}
+                  aria-label="Next photo"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center rounded-full bg-ink/60 text-chalk text-2xl font-bold active:bg-ink/80"
+                >
+                  &gt;
+                </button>
+                <div className="absolute bottom-2 right-2.5 bg-ink/60 text-chalk text-[11px] font-bold px-2 py-0.5 rounded-full">
+                  {photoIdx + 1} / {photos.length}
+                </div>
+              </>
             )}
           </div>
         ) : (
