@@ -854,7 +854,6 @@ export default function SaleAdmin({
         createPortal(
           <div className="hidden print:flex flex-col items-center text-center w-full h-full p-10 gap-6">
             <div className="text-7xl font-extrabold uppercase tracking-wide">Yard Sale</div>
-            {sale.address && <div className="text-2xl font-semibold">📍 {sale.address}</div>}
             <div className="flex flex-1 w-full items-stretch justify-center gap-6 min-h-0">
               <div className="flex-1 flex items-center justify-center">
                 <QRCodeSVG
@@ -865,6 +864,7 @@ export default function SaleAdmin({
               </div>
               <div className="w-1 bg-ink/25 self-stretch" />
               <div className="flex-1 flex flex-col items-center justify-center gap-4">
+                {sale.address && <div className="text-2xl font-semibold">📍 {sale.address}</div>}
                 {sortedDayRows.length > 0 ? (
                   sortedDayRows.map((d) => (
                     <div key={d.key} className="text-2xl font-semibold leading-snug">
