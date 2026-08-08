@@ -71,6 +71,7 @@ export default function SaleAdmin({
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>(initialSavedLocations);
   const [locationLabel, setLocationLabel] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [dayRows, setDayRows] = useState<DayRow[]>(toDayRows(initialSaleDays));
   const [printJob, setPrintJob] = useState<"qr" | "sign" | null>(null);
   const [printRoot, setPrintRoot] = useState<HTMLElement | null>(null);
@@ -172,6 +173,7 @@ export default function SaleAdmin({
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
     };
     const { data, error } = await supabase.from("sales").update(patch).eq("id", sale.id).select().single();
+    if (error) setSaveError(error.message);
 
     await supabase.from("sale_days").delete().eq("sale_id", sale.id);
     let savedDays: SaleDay[] = [];
@@ -203,6 +205,7 @@ export default function SaleAdmin({
   async function saveCurrentLocation() {
     const street = saleForm.street.trim();
     if (!street) return;
+    setLocationError("");
     setSavingLocation(true);
     const supabase = createClient();
     const { data, error } = await supabase
@@ -218,7 +221,11 @@ export default function SaleAdmin({
       .select()
       .single();
     setSavingLocation(false);
-    if (!error && data) {
+    if (error) {
+      setLocationError(error.message);
+      return;
+    }
+    if (data) {
       setSavedLocations((prev) => [data, ...prev]);
       setLocationLabel("");
     }
@@ -537,6 +544,7 @@ export default function SaleAdmin({
             {savingLocation ? "Saving…" : "💾 Save location"}
           </button>
         </div>
+        {locationError && <div className="text-marker text-xs font-semibold mb-2.5">{locationError}</div>}
 
         <div className="mb-2.5">
           <label className="block text-xs font-bold opacity-70 mb-1">Sale days</label>
