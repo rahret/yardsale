@@ -1,5 +1,5 @@
 export type SaleStatus = "draft" | "live" | "ended";
-export type ItemStatus = "available" | "reserved" | "sold";
+export type ItemStatus = "available" | "reserved" | "sold" | "low_stock";
 
 export interface Sale {
   id: string;
@@ -55,6 +55,8 @@ export interface Item {
   reserved_at: string | null;
   sold_at: string | null;
   sort_order: number;
+  quantity_total: number;
+  quantity_available: number;
   created_at: string;
   updated_at: string;
   item_photos?: ItemPhoto[];

@@ -56,6 +56,10 @@ export function isEffectivelyExpired(item: Item, sale: Sale): boolean {
   return Date.now() > reservationDeadline(item, sale);
 }
 
+export function isBulkItem(item: Item): boolean {
+  return item.quantity_total > 1;
+}
+
 export function categoriesOf(items: Item[]): string[] {
   const set = new Set<string>();
   items.forEach((i) => {

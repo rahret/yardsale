@@ -190,13 +190,18 @@ create table if not exists public.items (
   category text not null default 'Misc',
   price numeric(10, 2) not null default 0,
   icon text not null default '📦',
-  status text not null default 'available' check (status in ('available', 'reserved', 'sold')),
+  status text not null default 'available' check (status in ('available', 'reserved', 'sold', 'low_stock')),
   reservation_minutes int, -- null = use sale.default_reservation_minutes
   reserved_name text,
   reserved_phone text,
   reserved_at timestamptz,
   sold_at timestamptz,
   sort_order int not null default 0,
+  -- quantity_total = starting quantity (shown to buyers), quantity_available =
+  -- live remaining count (seller-only; a bulk item is one with quantity_total
+  -- > 1, e.g. "20 identical books sold as one item card").
+  quantity_total int not null default 1 check (quantity_total >= 1),
+  quantity_available int not null default 1 check (quantity_available >= 0 and quantity_available <= quantity_total),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -204,6 +209,20 @@ create table if not exists public.items (
 -- reservation history moved to sales.reserved_history: buyers are now
 -- limited to one reservation per person per sale, not per item.
 alter table public.items drop column if exists reserved_history;
+
+-- backfill for databases created before quantity tracking existed
+alter table public.items add column if not exists quantity_total int not null default 1;
+alter table public.items add column if not exists quantity_available int not null default 1;
+
+alter table public.items drop constraint if exists items_status_check;
+alter table public.items add constraint items_status_check check (status in ('available', 'reserved', 'sold', 'low_stock'));
+
+alter table public.items drop constraint if exists items_quantity_total_check;
+alter table public.items add constraint items_quantity_total_check check (quantity_total >= 1);
+
+alter table public.items drop constraint if exists items_quantity_available_check;
+alter table public.items add constraint items_quantity_available_check
+  check (quantity_available >= 0 and quantity_available <= quantity_total);
 
 create index if not exists items_sale_id_idx on public.items (sale_id);
 
@@ -334,6 +353,76 @@ create trigger items_set_updated_at before update on public.items
   for each row execute procedure public.set_updated_at();
 
 -- ----------------------------------------------------------------------------
+-- sync_item_status: for bulk items (quantity_total > 1) the status is fully
+-- derived from quantity_available rather than set by hand — sold out once
+-- quantity_available hits 0, "low_stock" once it drops under 10% of
+-- quantity_total, else available. Runs on insert, on any change to the
+-- quantity columns, and on any attempt to write `status` directly (e.g. a
+-- stale client trying to set a bulk item to "reserved") so the derived value
+-- always wins for bulk items. Single items (quantity_total = 1) are
+-- untouched here and keep the hand-managed available/reserved/sold flow.
+-- ----------------------------------------------------------------------------
+create or replace function public.sync_item_status()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.quantity_total > 1 then
+    if new.quantity_available <= 0 then
+      new.status := 'sold';
+      new.sold_at := coalesce(new.sold_at, now());
+    else
+      new.sold_at := null;
+      if new.quantity_available::numeric / new.quantity_total::numeric < 0.10 then
+        new.status := 'low_stock';
+      else
+        new.status := 'available';
+      end if;
+    end if;
+    -- bulk items are never reservable, so they should never carry hold state
+    new.reserved_name := null;
+    new.reserved_phone := null;
+    new.reserved_at := null;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists items_sync_status on public.items;
+create trigger items_sync_status
+  before insert or update of quantity_total, quantity_available, status on public.items
+  for each row execute procedure public.sync_item_status();
+
+-- ----------------------------------------------------------------------------
+-- adjust_item_quantity: atomically bumps a bulk item's live available count
+-- (positive delta to restock/undo, negative delta to record units just sold),
+-- clamped to [0, quantity_total]. Runs with the caller's own privileges, so
+-- the existing "owners can update items in their own sales" RLS policy is
+-- still what decides who is allowed to call this successfully.
+-- ----------------------------------------------------------------------------
+create or replace function public.adjust_item_quantity(p_item_id uuid, p_delta int)
+returns public.items
+language plpgsql
+as $$
+declare
+  v_item public.items%rowtype;
+begin
+  update public.items
+  set quantity_available = greatest(0, least(quantity_total, quantity_available + p_delta))
+  where id = p_item_id
+  returning * into v_item;
+
+  if not found then
+    raise exception 'Item not found or not authorized';
+  end if;
+
+  return v_item;
+end;
+$$;
+
+grant execute on function public.adjust_item_quantity(uuid, int) to authenticated;
+
+-- ----------------------------------------------------------------------------
 -- sweep_expired_reservations: flips any item whose reservation window has
 -- passed back to "available". Safe to call anonymously and often (the public
 -- shop page calls this on load and every ~4s while viewers are browsing).
@@ -395,6 +484,10 @@ begin
   select * into v_item from public.items where id = p_item_id for update;
   if not found then
     return jsonb_build_object('success', false, 'error', 'This item no longer exists.');
+  end if;
+
+  if v_item.quantity_total > 1 then
+    return jsonb_build_object('success', false, 'error', 'This is a bulk item sold in person — it can''t be reserved.');
   end if;
 
   select * into v_sale from public.sales where id = v_item.sale_id for update;
