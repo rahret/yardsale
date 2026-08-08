@@ -37,7 +37,7 @@ body {
 
 @media print {
   @page {
-    margin: 0.5in;
+    margin: 0.2in;
   }
 
   /* #print-root is portaled directly onto <body> (see SaleAdmin.tsx) so it

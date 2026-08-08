@@ -80,6 +80,10 @@ export default function SaleAdmin({
     [dayRows]
   );
 
+  // Sign shows just the street — city/state/zip is assumed common knowledge
+  // to anyone standing close enough to read a paper sign.
+  const signStreetAddress = sale.address.split(",")[0].trim();
+
   // Print content is portaled onto <body> (outside the app's layout tree) so
   // printing it doesn't leave the rest of the (visually hidden but still
   // space-occupying) dashboard page around to generate extra blank pages.
@@ -852,27 +856,27 @@ export default function SaleAdmin({
       {printRoot &&
         printJob === "sign" &&
         createPortal(
-          <div className="hidden print:flex flex-col items-center text-center w-full h-full p-10 gap-6">
-            <div className="text-7xl font-extrabold uppercase tracking-wide">Yard Sale</div>
+          <div className="hidden print:flex flex-col items-center text-center w-full h-full p-4 gap-4">
+            <div className="text-9xl font-extrabold uppercase tracking-wide">Yard Sale</div>
             <div className="flex flex-1 w-full items-stretch justify-center gap-6 min-h-0">
               <div className="flex-1 flex items-center justify-center">
                 <QRCodeSVG
                   value={shareUrl}
                   fgColor="#000000"
-                  style={{ width: "min(42vw, 75vh)", height: "min(42vw, 75vh)" }}
+                  style={{ width: "min(47vw, 88vh)", height: "min(47vw, 88vh)" }}
                 />
               </div>
               <div className="w-1 bg-ink/25 self-stretch" />
-              <div className="flex-1 flex flex-col items-center justify-center gap-4">
-                {sale.address && <div className="text-2xl font-semibold">📍 {sale.address}</div>}
+              <div className="flex-1 flex flex-col items-center justify-center gap-5">
+                {signStreetAddress && <div className="text-3xl font-semibold">{signStreetAddress}</div>}
                 {sortedDayRows.length > 0 ? (
                   sortedDayRows.map((d) => (
-                    <div key={d.key} className="text-2xl font-semibold leading-snug">
+                    <div key={d.key} className="text-4xl font-semibold leading-snug">
                       {formatSaleDay(d)}
                     </div>
                   ))
                 ) : (
-                  <div className="text-xl opacity-60">Dates &amp; times coming soon</div>
+                  <div className="text-2xl opacity-60">Dates &amp; times coming soon</div>
                 )}
               </div>
             </div>
