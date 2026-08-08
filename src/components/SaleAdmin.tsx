@@ -852,20 +852,30 @@ export default function SaleAdmin({
       {printRoot &&
         printJob === "sign" &&
         createPortal(
-          <div className="hidden print:flex flex-col items-center justify-center text-center gap-5 w-full h-full p-10">
+          <div className="hidden print:flex flex-col items-center text-center w-full h-full p-10 gap-6">
             <div className="text-7xl font-extrabold uppercase tracking-wide">Yard Sale</div>
-            <div className="text-3xl font-bold">{sale.name}</div>
-            {sale.tagline && <div className="text-xl italic opacity-80">{sale.tagline}</div>}
             {sale.address && <div className="text-2xl font-semibold">📍 {sale.address}</div>}
-            {sortedDayRows.length > 0 && (
-              <div className="text-xl font-semibold space-y-1">
-                {sortedDayRows.map((d) => (
-                  <div key={d.key}>{formatSaleDay(d)}</div>
-                ))}
+            <div className="flex flex-1 w-full items-stretch justify-center gap-6 min-h-0">
+              <div className="flex-1 flex items-center justify-center">
+                <QRCodeSVG
+                  value={shareUrl}
+                  fgColor="#000000"
+                  style={{ width: "min(42vw, 75vh)", height: "min(42vw, 75vh)" }}
+                />
               </div>
-            )}
-            <QRCodeSVG value={shareUrl} fgColor="#000000" style={{ width: "220px", height: "220px" }} />
-            <div className="text-lg font-bold">Scan for photos &amp; the full item list!</div>
+              <div className="w-1 bg-ink/25 self-stretch" />
+              <div className="flex-1 flex flex-col items-center justify-center gap-4">
+                {sortedDayRows.length > 0 ? (
+                  sortedDayRows.map((d) => (
+                    <div key={d.key} className="text-2xl font-semibold leading-snug">
+                      {formatSaleDay(d)}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xl opacity-60">Dates &amp; times coming soon</div>
+                )}
+              </div>
+            </div>
           </div>,
           printRoot
         )}
