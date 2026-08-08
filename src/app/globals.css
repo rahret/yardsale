@@ -40,18 +40,17 @@ body {
     margin: 0.5in;
   }
 
-  body * {
-    visibility: hidden;
+  /* #print-root is portaled directly onto <body> (see SaleAdmin.tsx) so it
+     sits outside the app's normal layout tree. Collapsing every other body
+     child with display:none (not just visibility:hidden) keeps them from
+     reserving layout height, which is what caused extra blank pages. */
+  body > *:not(#print-root) {
+    display: none !important;
   }
 
-  .print-area,
-  .print-area * {
-    visibility: visible;
-  }
-
-  .print-area {
-    position: absolute;
-    inset: 0;
+  #print-root {
+    display: block;
     width: 100%;
+    height: 100vh;
   }
 }

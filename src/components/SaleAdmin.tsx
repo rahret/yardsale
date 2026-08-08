@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { QRCodeCanvas } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
@@ -69,6 +70,7 @@ export default function SaleAdmin({
   const [savingLocation, setSavingLocation] = useState(false);
   const [dayRows, setDayRows] = useState<DayRow[]>(toDayRows(initialSaleDays));
   const [printJob, setPrintJob] = useState<"qr" | "sign" | null>(null);
+  const [printRoot, setPrintRoot] = useState<HTMLElement | null>(null);
 
   const siteUrl = siteOrigin(typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = `${siteUrl}/s/${sale.slug}`;
@@ -77,6 +79,19 @@ export default function SaleAdmin({
     () => [...dayRows].filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date)),
     [dayRows]
   );
+
+  // Print content is portaled onto <body> (outside the app's layout tree) so
+  // printing it doesn't leave the rest of the (visually hidden but still
+  // space-occupying) dashboard page around to generate extra blank pages.
+  useEffect(() => {
+    let el = document.getElementById("print-root");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "print-root";
+      document.body.appendChild(el);
+    }
+    setPrintRoot(el);
+  }, []);
 
   useEffect(() => {
     if (!printJob) return;
@@ -817,34 +832,35 @@ export default function SaleAdmin({
         </div>
       </Card>
 
-      {printJob === "qr" && (
-        <div className="hidden print:block print-area p-10 text-center">
-          <div className="text-3xl font-extrabold mb-6">{sale.name}</div>
-          <div className="flex justify-center mb-6">
-            <QRCodeCanvas value={shareUrl} size={280} fgColor="#000000" />
-          </div>
-          <div className="text-xl font-semibold">Scan to see photos &amp; prices</div>
-          <div className="text-sm opacity-70 mt-2">{shareUrl}</div>
-        </div>
-      )}
+      {printRoot &&
+        printJob === "qr" &&
+        createPortal(
+          <div className="hidden print:flex items-center justify-center w-full h-full">
+            <QRCodeCanvas value={shareUrl} size={1200} fgColor="#000000" style={{ width: "7in", height: "7in" }} />
+          </div>,
+          printRoot
+        )}
 
-      {printJob === "sign" && (
-        <div className="hidden print:flex print-area p-10 flex-col items-center justify-center text-center gap-5">
-          <div className="text-7xl font-extrabold uppercase tracking-wide">Yard Sale</div>
-          <div className="text-3xl font-bold">{sale.name}</div>
-          {sale.tagline && <div className="text-xl italic opacity-80">{sale.tagline}</div>}
-          {sale.address && <div className="text-2xl font-semibold">📍 {sale.address}</div>}
-          {sortedDayRows.length > 0 && (
-            <div className="text-xl font-semibold space-y-1">
-              {sortedDayRows.map((d) => (
-                <div key={d.key}>{formatSaleDay(d)}</div>
-              ))}
-            </div>
-          )}
-          <QRCodeCanvas value={shareUrl} size={220} fgColor="#000000" />
-          <div className="text-lg font-bold">Scan for photos &amp; the full item list!</div>
-        </div>
-      )}
+      {printRoot &&
+        printJob === "sign" &&
+        createPortal(
+          <div className="hidden print:flex flex-col items-center justify-center text-center gap-5 w-full h-full p-10">
+            <div className="text-7xl font-extrabold uppercase tracking-wide">Yard Sale</div>
+            <div className="text-3xl font-bold">{sale.name}</div>
+            {sale.tagline && <div className="text-xl italic opacity-80">{sale.tagline}</div>}
+            {sale.address && <div className="text-2xl font-semibold">📍 {sale.address}</div>}
+            {sortedDayRows.length > 0 && (
+              <div className="text-xl font-semibold space-y-1">
+                {sortedDayRows.map((d) => (
+                  <div key={d.key}>{formatSaleDay(d)}</div>
+                ))}
+              </div>
+            )}
+            <QRCodeCanvas value={shareUrl} size={220} fgColor="#000000" />
+            <div className="text-lg font-bold">Scan for photos &amp; the full item list!</div>
+          </div>,
+          printRoot
+        )}
     </div>
   );
 }
