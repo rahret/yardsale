@@ -10,6 +10,7 @@ export interface Sale {
   address: string;
   default_reservation_minutes: number;
   status: SaleStatus;
+  reserved_history: string[];
   created_at: string;
   updated_at: string;
 }
@@ -52,7 +53,6 @@ export interface Item {
   reserved_name: string | null;
   reserved_phone: string | null;
   reserved_at: string | null;
-  reserved_history: string[];
   sold_at: string | null;
   sort_order: number;
   created_at: string;
