@@ -1,8 +1,15 @@
-import type { Item, Sale, SaleDay } from "./types";
+import type { Address, Item, Sale, SaleDay } from "./types";
 
 export function money(n: number | null | undefined): string {
   const v = Number(n) || 0;
   return "$" + (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
+}
+
+/** Joins the structured address fields into one display string, e.g.
+ * "123 Main St, Springfield, IL 62704". Omits any parts that are blank. */
+export function formatAddress(a: Address): string {
+  const cityStateZip = [a.city, [a.state, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return [a.street, cityStateZip].filter(Boolean).join(", ");
 }
 
 export function normalizePhone(p: string | null | undefined): string {
@@ -83,7 +90,7 @@ export function formatTime(t: string): string {
 
 /** Formats one sale_days row into a single human-readable line, e.g.
  * "Fri, Aug 15 · 10:00 AM – 4:00 PM". */
-export function formatSaleDay(day: SaleDay): string {
+export function formatSaleDay(day: Pick<SaleDay, "date" | "start_time" | "end_time">): string {
   const date = new Date(day.date + "T00:00:00");
   const dateStr = date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   return `${dateStr} · ${formatTime(day.start_time)} – ${formatTime(day.end_time)}`;

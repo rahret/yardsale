@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { QRCodeCanvas } from "qrcode.react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
-import { EMOJI_PRESETS, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
+import { EMOJI_PRESETS, formatAddress, formatSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 
 const MAX_SALE_DAYS = 7;
@@ -59,7 +60,10 @@ export default function SaleAdmin({
   const [saleForm, setSaleForm] = useState({
     name: sale.name,
     tagline: sale.tagline,
-    address: sale.address || "",
+    street: sale.street || "",
+    city: sale.city || "",
+    state: sale.state || "",
+    zip: sale.zip || "",
     default_reservation_minutes: String(sale.default_reservation_minutes),
   });
   const [savingSale, setSavingSale] = useState(false);
@@ -67,10 +71,44 @@ export default function SaleAdmin({
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>(initialSavedLocations);
   const [locationLabel, setLocationLabel] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
+  const [locationError, setLocationError] = useState("");
   const [dayRows, setDayRows] = useState<DayRow[]>(toDayRows(initialSaleDays));
+  const [printJob, setPrintJob] = useState<"qr" | "sign" | null>(null);
+  const [printRoot, setPrintRoot] = useState<HTMLElement | null>(null);
 
   const siteUrl = siteOrigin(typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = `${siteUrl}/s/${sale.slug}`;
+
+  const sortedDayRows = useMemo(
+    () => [...dayRows].filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date)),
+    [dayRows]
+  );
+
+  // Print content is portaled onto <body> (outside the app's layout tree) so
+  // printing it doesn't leave the rest of the (visually hidden but still
+  // space-occupying) dashboard page around to generate extra blank pages.
+  useEffect(() => {
+    let el = document.getElementById("print-root");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "print-root";
+      document.body.appendChild(el);
+    }
+    setPrintRoot(el);
+  }, []);
+
+  useEffect(() => {
+    if (!printJob) return;
+    const t = setTimeout(() => window.print(), 60);
+    function onAfterPrint() {
+      setPrintJob(null);
+    }
+    window.addEventListener("afterprint", onAfterPrint);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("afterprint", onAfterPrint);
+    };
+  }, [printJob]);
 
   const stats = useMemo(() => {
     const unitsSold = (i: Item) =>
@@ -128,10 +166,14 @@ export default function SaleAdmin({
     const patch = {
       name: saleForm.name.trim().slice(0, 50) || sale.name,
       tagline: saleForm.tagline.trim().slice(0, 75),
-      address: saleForm.address.trim(),
+      street: saleForm.street.trim(),
+      city: saleForm.city.trim(),
+      state: saleForm.state.trim(),
+      zip: saleForm.zip.trim(),
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
     };
     const { data, error } = await supabase.from("sales").update(patch).eq("id", sale.id).select().single();
+    if (error) setSaveError(error.message);
 
     await supabase.from("sale_days").delete().eq("sale_id", sale.id);
     let savedDays: SaleDay[] = [];
@@ -157,21 +199,33 @@ export default function SaleAdmin({
   }
 
   function selectSavedLocation(loc: SavedLocation) {
-    setSaleForm((prev) => ({ ...prev, address: loc.address }));
+    setSaleForm((prev) => ({ ...prev, street: loc.street, city: loc.city, state: loc.state, zip: loc.zip }));
   }
 
   async function saveCurrentLocation() {
-    const address = saleForm.address.trim();
-    if (!address) return;
+    const street = saleForm.street.trim();
+    if (!street) return;
+    setLocationError("");
     setSavingLocation(true);
     const supabase = createClient();
     const { data, error } = await supabase
       .from("saved_locations")
-      .insert({ owner_id: sale.owner_id, label: locationLabel.trim(), address })
+      .insert({
+        owner_id: sale.owner_id,
+        label: locationLabel.trim(),
+        street,
+        city: saleForm.city.trim(),
+        state: saleForm.state.trim(),
+        zip: saleForm.zip.trim(),
+      })
       .select()
       .single();
     setSavingLocation(false);
-    if (!error && data) {
+    if (error) {
+      setLocationError(error.message);
+      return;
+    }
+    if (data) {
       setSavedLocations((prev) => [data, ...prev]);
       setLocationLabel("");
     }
@@ -356,12 +410,34 @@ export default function SaleAdmin({
           </button>
         </div>
         <div className="flex items-center gap-4 flex-wrap">
-          <div className="bg-white p-2 rounded-lg border-2 border-cardboard-dark">
+          <button
+            type="button"
+            onClick={() => setPrintJob("qr")}
+            className="bg-white p-2 rounded-lg border-2 border-cardboard-dark cursor-pointer"
+            title="Click to print this QR code"
+          >
             <QRCodeCanvas value={shareUrl} size={120} fgColor="#33312E" />
-          </div>
+          </button>
           <div className="text-xs opacity-70 flex-1 min-w-[160px]">
-            Print this QR code on your signs. It always points to the link above.
+            Click the QR code, or use the buttons below, to print it for your signs. It always points to the link
+            above.
           </div>
+        </div>
+        <div className="flex gap-2 flex-wrap mt-3">
+          <button
+            type="button"
+            onClick={() => setPrintJob("qr")}
+            className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm"
+          >
+            🖨️ Print QR code
+          </button>
+          <button
+            type="button"
+            onClick={() => setPrintJob("sign")}
+            className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm shadow-tag"
+          >
+            🪧 Create sign
+          </button>
         </div>
       </Card>
 
@@ -385,14 +461,41 @@ export default function SaleAdmin({
           />
           <div className="text-[11px] opacity-50 mt-1 text-right">{saleForm.tagline.length}/75</div>
         </Field>
-        <Field label="Address">
-          <textarea
-            value={saleForm.address}
-            onChange={(e) => setSaleForm({ ...saleForm, address: e.target.value })}
-            placeholder="123 Main St, Springfield"
-            className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg min-h-[50px]"
+        <Field label="Street address">
+          <input
+            value={saleForm.street}
+            onChange={(e) => setSaleForm({ ...saleForm, street: e.target.value })}
+            placeholder="123 Main St"
+            className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
           />
         </Field>
+        <div className="grid grid-cols-[2fr_1fr_1fr] gap-2">
+          <Field label="City">
+            <input
+              value={saleForm.city}
+              onChange={(e) => setSaleForm({ ...saleForm, city: e.target.value })}
+              placeholder="Springfield"
+              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+            />
+          </Field>
+          <Field label="State">
+            <input
+              value={saleForm.state}
+              onChange={(e) => setSaleForm({ ...saleForm, state: e.target.value })}
+              placeholder="IL"
+              maxLength={2}
+              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+            />
+          </Field>
+          <Field label="ZIP">
+            <input
+              value={saleForm.zip}
+              onChange={(e) => setSaleForm({ ...saleForm, zip: e.target.value })}
+              placeholder="62704"
+              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+            />
+          </Field>
+        </div>
 
         {savedLocations.length > 0 && (
           <div className="mb-2.5">
@@ -407,9 +510,9 @@ export default function SaleAdmin({
                     type="button"
                     onClick={() => selectSavedLocation(loc)}
                     className="text-xs font-bold text-left max-w-[180px] truncate"
-                    title={loc.address}
+                    title={formatAddress(loc)}
                   >
-                    {loc.label || loc.address}
+                    {loc.label || formatAddress(loc)}
                   </button>
                   <button
                     type="button"
@@ -435,12 +538,13 @@ export default function SaleAdmin({
           <button
             type="button"
             onClick={saveCurrentLocation}
-            disabled={savingLocation || !saleForm.address.trim()}
+            disabled={savingLocation || !saleForm.street.trim()}
             className="border-2 border-cardboard-dark bg-white font-bold px-3 rounded-lg text-sm disabled:opacity-50"
           >
             {savingLocation ? "Saving…" : "💾 Save location"}
           </button>
         </div>
+        {locationError && <div className="text-marker text-xs font-semibold mb-2.5">{locationError}</div>}
 
         <div className="mb-2.5">
           <label className="block text-xs font-bold opacity-70 mb-1">Sale days</label>
@@ -775,6 +879,54 @@ export default function SaleAdmin({
           ))}
         </div>
       </Card>
+
+      {printRoot &&
+        printJob === "qr" &&
+        createPortal(
+          <div className="hidden print:flex items-center justify-center w-full h-full">
+            {/* SVG (not canvas) so it scales losslessly to whatever page size is
+                picked in Print Setup — sized relative to the printable page
+                itself (vw/vh), not a fixed inch value, so it always fills most
+                of the sheet on Letter, A4, A5, labels, etc. */}
+            <QRCodeSVG
+              value={shareUrl}
+              fgColor="#000000"
+              style={{ width: "min(90vw, 90vh)", height: "min(90vw, 90vh)" }}
+            />
+          </div>,
+          printRoot
+        )}
+
+      {printRoot &&
+        printJob === "sign" &&
+        createPortal(
+          <div className="hidden print:flex flex-col items-center text-center w-full h-full p-4 gap-4">
+            <div className="text-9xl font-extrabold uppercase tracking-wide">Yard Sale</div>
+            <div className="flex flex-1 w-full items-stretch justify-center gap-6 min-h-0">
+              <div className="flex-1 flex items-center justify-center">
+                <QRCodeSVG
+                  value={shareUrl}
+                  fgColor="#000000"
+                  style={{ width: "min(47vw, 88vh)", height: "min(47vw, 88vh)" }}
+                />
+              </div>
+              <div className="w-1 bg-ink/25 self-stretch" />
+              <div className="flex-1 flex flex-col items-center justify-center gap-5">
+                {sale.street && <div className="text-3xl font-semibold">{sale.street}</div>}
+                {sortedDayRows.length > 0 ? (
+                  sortedDayRows.map((d) => (
+                    <div key={d.key} className="text-4xl font-semibold leading-snug">
+                      {formatSaleDay(d)}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-2xl opacity-60">Dates &amp; times coming soon</div>
+                )}
+              </div>
+            </div>
+          </div>,
+          printRoot
+        )}
     </div>
   );
 }

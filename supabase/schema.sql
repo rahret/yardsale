@@ -54,7 +54,10 @@ create table if not exists public.sales (
   slug text not null unique,
   name text not null default 'My Garage Sale',
   tagline text not null default 'everything must go — cash or Venmo',
-  address text not null default '',
+  street text not null default '',
+  city text not null default '',
+  state text not null default '',
+  zip text not null default '',
   default_reservation_minutes int not null default 30,
   status text not null default 'draft' check (status in ('draft', 'live', 'ended')),
   reserved_history text[] not null default '{}', -- normalized phone numbers that already reserved an item in this sale
@@ -63,8 +66,17 @@ create table if not exists public.sales (
 );
 
 -- backfill for databases created before these columns existed
-alter table public.sales add column if not exists address text not null default '';
 alter table public.sales add column if not exists reserved_history text[] not null default '{}';
+
+-- address was originally one free-text field; split into street/city/state/zip
+-- so the app never has to guess where "street" ends inside a comma-joined
+-- string (e.g. the printed sign, which only wants the street). Existing
+-- sales will need their address re-entered in the new fields.
+alter table public.sales add column if not exists street text not null default '';
+alter table public.sales add column if not exists city text not null default '';
+alter table public.sales add column if not exists state text not null default '';
+alter table public.sales add column if not exists zip text not null default '';
+alter table public.sales drop column if exists address;
 
 -- starts_at/ends_at (a single date range) were replaced by the sale_days
 -- table below, which supports different hours on different days.
@@ -151,9 +163,20 @@ create table if not exists public.saved_locations (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null references auth.users (id) on delete cascade,
   label text not null default '',
-  address text not null,
+  street text not null default '',
+  city text not null default '',
+  state text not null default '',
+  zip text not null default '',
   created_at timestamptz not null default now()
 );
+
+-- split the same way as sales.address above; existing saved locations will
+-- need to be re-saved in the new fields.
+alter table public.saved_locations add column if not exists street text not null default '';
+alter table public.saved_locations add column if not exists city text not null default '';
+alter table public.saved_locations add column if not exists state text not null default '';
+alter table public.saved_locations add column if not exists zip text not null default '';
+alter table public.saved_locations drop column if exists address;
 
 create index if not exists saved_locations_owner_id_idx on public.saved_locations (owner_id);
 
