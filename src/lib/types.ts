@@ -1,13 +1,19 @@
 export type SaleStatus = "draft" | "live" | "ended";
 export type ItemStatus = "available" | "reserved" | "sold" | "low_stock";
 
-export interface Sale {
+export interface Address {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+export interface Sale extends Address {
   id: string;
   owner_id: string;
   slug: string;
   name: string;
   tagline: string;
-  address: string;
   default_reservation_minutes: number;
   status: SaleStatus;
   reserved_history: string[];
@@ -15,11 +21,10 @@ export interface Sale {
   updated_at: string;
 }
 
-export interface SavedLocation {
+export interface SavedLocation extends Address {
   id: string;
   owner_id: string;
   label: string;
-  address: string;
   created_at: string;
 }
 

@@ -1,8 +1,15 @@
-import type { Item, Sale, SaleDay } from "./types";
+import type { Address, Item, Sale, SaleDay } from "./types";
 
 export function money(n: number | null | undefined): string {
   const v = Number(n) || 0;
   return "$" + (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
+}
+
+/** Joins the structured address fields into one display string, e.g.
+ * "123 Main St, Springfield, IL 62704". Omits any parts that are blank. */
+export function formatAddress(a: Address): string {
+  const cityStateZip = [a.city, [a.state, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return [a.street, cityStateZip].filter(Boolean).join(", ");
 }
 
 export function normalizePhone(p: string | null | undefined): string {

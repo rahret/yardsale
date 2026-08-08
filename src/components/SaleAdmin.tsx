@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
-import { EMOJI_PRESETS, formatSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
+import { EMOJI_PRESETS, formatAddress, formatSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 
 const MAX_SALE_DAYS = 7;
@@ -60,7 +60,10 @@ export default function SaleAdmin({
   const [saleForm, setSaleForm] = useState({
     name: sale.name,
     tagline: sale.tagline,
-    address: sale.address || "",
+    street: sale.street || "",
+    city: sale.city || "",
+    state: sale.state || "",
+    zip: sale.zip || "",
     default_reservation_minutes: String(sale.default_reservation_minutes),
   });
   const [savingSale, setSavingSale] = useState(false);
@@ -79,10 +82,6 @@ export default function SaleAdmin({
     () => [...dayRows].filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date)),
     [dayRows]
   );
-
-  // Sign shows just the street — city/state/zip is assumed common knowledge
-  // to anyone standing close enough to read a paper sign.
-  const signStreetAddress = sale.address.split(",")[0].trim();
 
   // Print content is portaled onto <body> (outside the app's layout tree) so
   // printing it doesn't leave the rest of the (visually hidden but still
@@ -166,7 +165,10 @@ export default function SaleAdmin({
     const patch = {
       name: saleForm.name.trim().slice(0, 50) || sale.name,
       tagline: saleForm.tagline.trim().slice(0, 75),
-      address: saleForm.address.trim(),
+      street: saleForm.street.trim(),
+      city: saleForm.city.trim(),
+      state: saleForm.state.trim(),
+      zip: saleForm.zip.trim(),
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
     };
     const { data, error } = await supabase.from("sales").update(patch).eq("id", sale.id).select().single();
@@ -195,17 +197,24 @@ export default function SaleAdmin({
   }
 
   function selectSavedLocation(loc: SavedLocation) {
-    setSaleForm((prev) => ({ ...prev, address: loc.address }));
+    setSaleForm((prev) => ({ ...prev, street: loc.street, city: loc.city, state: loc.state, zip: loc.zip }));
   }
 
   async function saveCurrentLocation() {
-    const address = saleForm.address.trim();
-    if (!address) return;
+    const street = saleForm.street.trim();
+    if (!street) return;
     setSavingLocation(true);
     const supabase = createClient();
     const { data, error } = await supabase
       .from("saved_locations")
-      .insert({ owner_id: sale.owner_id, label: locationLabel.trim(), address })
+      .insert({
+        owner_id: sale.owner_id,
+        label: locationLabel.trim(),
+        street,
+        city: saleForm.city.trim(),
+        state: saleForm.state.trim(),
+        zip: saleForm.zip.trim(),
+      })
       .select()
       .single();
     setSavingLocation(false);
@@ -445,14 +454,41 @@ export default function SaleAdmin({
           />
           <div className="text-[11px] opacity-50 mt-1 text-right">{saleForm.tagline.length}/75</div>
         </Field>
-        <Field label="Address">
-          <textarea
-            value={saleForm.address}
-            onChange={(e) => setSaleForm({ ...saleForm, address: e.target.value })}
-            placeholder="123 Main St, Springfield"
-            className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg min-h-[50px]"
+        <Field label="Street address">
+          <input
+            value={saleForm.street}
+            onChange={(e) => setSaleForm({ ...saleForm, street: e.target.value })}
+            placeholder="123 Main St"
+            className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
           />
         </Field>
+        <div className="grid grid-cols-[2fr_1fr_1fr] gap-2">
+          <Field label="City">
+            <input
+              value={saleForm.city}
+              onChange={(e) => setSaleForm({ ...saleForm, city: e.target.value })}
+              placeholder="Springfield"
+              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+            />
+          </Field>
+          <Field label="State">
+            <input
+              value={saleForm.state}
+              onChange={(e) => setSaleForm({ ...saleForm, state: e.target.value })}
+              placeholder="IL"
+              maxLength={2}
+              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+            />
+          </Field>
+          <Field label="ZIP">
+            <input
+              value={saleForm.zip}
+              onChange={(e) => setSaleForm({ ...saleForm, zip: e.target.value })}
+              placeholder="62704"
+              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+            />
+          </Field>
+        </div>
 
         {savedLocations.length > 0 && (
           <div className="mb-2.5">
@@ -467,9 +503,9 @@ export default function SaleAdmin({
                     type="button"
                     onClick={() => selectSavedLocation(loc)}
                     className="text-xs font-bold text-left max-w-[180px] truncate"
-                    title={loc.address}
+                    title={formatAddress(loc)}
                   >
-                    {loc.label || loc.address}
+                    {loc.label || formatAddress(loc)}
                   </button>
                   <button
                     type="button"
@@ -495,7 +531,7 @@ export default function SaleAdmin({
           <button
             type="button"
             onClick={saveCurrentLocation}
-            disabled={savingLocation || !saleForm.address.trim()}
+            disabled={savingLocation || !saleForm.street.trim()}
             className="border-2 border-cardboard-dark bg-white font-bold px-3 rounded-lg text-sm disabled:opacity-50"
           >
             {savingLocation ? "Saving…" : "💾 Save location"}
@@ -868,7 +904,7 @@ export default function SaleAdmin({
               </div>
               <div className="w-1 bg-ink/25 self-stretch" />
               <div className="flex-1 flex flex-col items-center justify-center gap-5">
-                {signStreetAddress && <div className="text-3xl font-semibold">{signStreetAddress}</div>}
+                {sale.street && <div className="text-3xl font-semibold">{sale.street}</div>}
                 {sortedDayRows.length > 0 ? (
                   sortedDayRows.map((d) => (
                     <div key={d.key} className="text-4xl font-semibold leading-snug">

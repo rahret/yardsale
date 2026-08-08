@@ -6,6 +6,7 @@ import type { Item, Sale, SaleDay } from "@/lib/types";
 import {
   categoriesOf,
   fmtMMSS,
+  formatAddress,
   formatSaleDay,
   isBulkItem,
   mapsUrl,
@@ -93,14 +94,14 @@ export default function ShopView({
         <div className="min-w-0 flex-1">
           <div className="font-marker text-3xl text-marker -rotate-1 break-words">{sale.name}</div>
           <div className="text-sm opacity-65 mt-1.5 break-words">{sale.tagline}</div>
-          {sale.address && (
+          {sale.street && (
             <a
-              href={mapsUrl(sale.address)}
+              href={mapsUrl(formatAddress(sale))}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-sm font-semibold text-grass-dark mt-1.5 underline underline-offset-2"
             >
-              📍 {sale.address}
+              📍 {formatAddress(sale)}
             </a>
           )}
           {sortedDays.length > 0 && (
