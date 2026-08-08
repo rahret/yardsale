@@ -491,7 +491,8 @@ function DetailSheet({
             </button>
             {error && <div className="text-marker text-sm font-semibold mt-2">{error}</div>}
             <div className="text-xs opacity-60 text-center mt-2">
-              Show your name at pickup — we&apos;ll only use your number if we need to reach you.
+              Show your name at pickup — we&apos;ll only use your number if we need to reach you. You can only
+              hold one item per sale, so make it count!
             </div>
           </>
         )}

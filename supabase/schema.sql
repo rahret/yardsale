@@ -57,12 +57,14 @@ create table if not exists public.sales (
   address text not null default '',
   default_reservation_minutes int not null default 30,
   status text not null default 'draft' check (status in ('draft', 'live', 'ended')),
+  reserved_history text[] not null default '{}', -- normalized phone numbers that already reserved an item in this sale
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 -- backfill for databases created before these columns existed
 alter table public.sales add column if not exists address text not null default '';
+alter table public.sales add column if not exists reserved_history text[] not null default '{}';
 
 -- starts_at/ends_at (a single date range) were replaced by the sale_days
 -- table below, which supports different hours on different days.
@@ -193,12 +195,15 @@ create table if not exists public.items (
   reserved_name text,
   reserved_phone text,
   reserved_at timestamptz,
-  reserved_history text[] not null default '{}', -- normalized phone numbers that already reserved this item once
   sold_at timestamptz,
   sort_order int not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- reservation history moved to sales.reserved_history: buyers are now
+-- limited to one reservation per person per sale, not per item.
+alter table public.items drop column if exists reserved_history;
 
 create index if not exists items_sale_id_idx on public.items (sale_id);
 
@@ -357,8 +362,11 @@ grant execute on function public.sweep_expired_reservations(uuid) to anon, authe
 -- ----------------------------------------------------------------------------
 -- reserve_item: the only way a buyer can place a hold on an item. Runs as a
 -- single atomic transaction so two people racing for the same item can't both
--- win it, enforces "one reservation per item per phone number", respects the
--- sale being live, and auto-expires stale reservations first.
+-- win it, enforces "one reservation per person per sale" (tracked on
+-- sales.reserved_history, not per item), respects the sale being live, and
+-- auto-expires stale reservations first. The sales row is locked for the
+-- duration of the transaction so two concurrent reservation attempts by the
+-- same phone number (on different items) can't both slip past the check.
 -- ----------------------------------------------------------------------------
 create or replace function public.reserve_item(
   p_item_id uuid,
@@ -389,7 +397,7 @@ begin
     return jsonb_build_object('success', false, 'error', 'This item no longer exists.');
   end if;
 
-  select * into v_sale from public.sales where id = v_item.sale_id;
+  select * into v_sale from public.sales where id = v_item.sale_id for update;
   if not found or v_sale.status <> 'live' then
     return jsonb_build_object('success', false, 'error', 'This sale is not currently accepting reservations.');
   end if;
@@ -410,17 +418,20 @@ begin
   if v_item.status = 'reserved' then
     return jsonb_build_object('success', false, 'error', 'Someone just reserved this — try another item!');
   end if;
-  if v_norm_phone = any(v_item.reserved_history) then
-    return jsonb_build_object('success', false, 'error', 'You''ve already reserved this item once — one reservation per item per person.');
+  if v_norm_phone = any(v_sale.reserved_history) then
+    return jsonb_build_object('success', false, 'error', 'You''ve already made a reservation for this sale — one reservation per person.');
   end if;
 
   update public.items
   set status = 'reserved',
       reserved_name = trim(p_name),
       reserved_phone = trim(p_phone),
-      reserved_at = now(),
-      reserved_history = array_append(v_item.reserved_history, v_norm_phone)
+      reserved_at = now()
   where id = p_item_id;
+
+  update public.sales
+  set reserved_history = array_append(v_sale.reserved_history, v_norm_phone)
+  where id = v_sale.id;
 
   return jsonb_build_object('success', true, 'reservation_minutes', v_minutes);
 end;
