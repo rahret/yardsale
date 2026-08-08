@@ -2,13 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Item, Sale } from "@/lib/types";
-import { categoriesOf, fmtMMSS, formatSaleSchedule, mapsUrl, money, reservationDeadline } from "@/lib/utils";
+import type { Item, Sale, SaleDay } from "@/lib/types";
+import { categoriesOf, fmtMMSS, formatSaleDay, mapsUrl, money, reservationDeadline, sortSaleDays } from "@/lib/utils";
 import { photoUrl } from "@/components/PhotoUploader";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
 
-export default function ShopView({ sale, initialItems }: { sale: Sale; initialItems: Item[] }) {
+export default function ShopView({
+  sale,
+  initialItems,
+  saleDays,
+}: {
+  sale: Sale;
+  initialItems: Item[];
+  saleDays: SaleDay[];
+}) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [filterCat, setFilterCat] = useState("all");
   const [sort, setSort] = useState<SortKey>("newest");
@@ -58,6 +66,7 @@ export default function ShopView({ sale, initialItems }: { sale: Sale; initialIt
 
   const selected = items.find((i) => i.id === selectedId) || null;
   const availableCount = items.filter((i) => i.status === "available").length;
+  const sortedDays = useMemo(() => sortSaleDays(saleDays), [saleDays]);
 
   function updateItem(next: Item) {
     setItems((prev) => prev.map((i) => (i.id === next.id ? next : i)));
@@ -85,9 +94,11 @@ export default function ShopView({ sale, initialItems }: { sale: Sale; initialIt
               📍 {sale.address}
             </a>
           )}
-          {(sale.starts_at || sale.ends_at) && (
-            <div className="text-xs opacity-70 mt-1 font-semibold">
-              🗓️ {formatSaleSchedule(sale.starts_at, sale.ends_at)}
+          {sortedDays.length > 0 && (
+            <div className="text-xs opacity-70 mt-1 font-semibold space-y-0.5">
+              {sortedDays.map((day) => (
+                <div key={day.id}>🗓️ {formatSaleDay(day)}</div>
+              ))}
             </div>
           )}
           {sale.status === "live" ? (

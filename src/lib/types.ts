@@ -8,8 +8,6 @@ export interface Sale {
   name: string;
   tagline: string;
   address: string;
-  starts_at: string | null;
-  ends_at: string | null;
   default_reservation_minutes: number;
   status: SaleStatus;
   created_at: string;
@@ -21,6 +19,15 @@ export interface SavedLocation {
   owner_id: string;
   label: string;
   address: string;
+  created_at: string;
+}
+
+export interface SaleDay {
+  id: string;
+  sale_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
   created_at: string;
 }
 

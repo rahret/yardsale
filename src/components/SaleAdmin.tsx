@@ -3,21 +3,21 @@
 import { useMemo, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
-import type { Item, Sale, SaleStatus, SavedLocation } from "@/lib/types";
-import { EMOJI_PRESETS, money, siteOrigin } from "@/lib/utils";
+import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
+import { EMOJI_PRESETS, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+const MAX_SALE_DAYS = 7;
 
-function fromLocalInput(val: string): string | null {
-  if (!val) return null;
-  const d = new Date(val);
-  return isNaN(d.getTime()) ? null : d.toISOString();
+type DayRow = { key: string; date: string; start_time: string; end_time: string };
+
+function toDayRows(days: SaleDay[]): DayRow[] {
+  return sortSaleDays(days).map((d) => ({
+    key: d.id,
+    date: d.date,
+    start_time: d.start_time.slice(0, 5),
+    end_time: d.end_time.slice(0, 5),
+  }));
 }
 
 const STATUS_OPTIONS: { value: SaleStatus; label: string; hint: string }[] = [
@@ -32,10 +32,12 @@ export default function SaleAdmin({
   sale: initialSale,
   initialItems,
   initialSavedLocations,
+  initialSaleDays,
 }: {
   sale: Sale;
   initialItems: Item[];
   initialSavedLocations: SavedLocation[];
+  initialSaleDays: SaleDay[];
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
@@ -49,14 +51,14 @@ export default function SaleAdmin({
     name: sale.name,
     tagline: sale.tagline,
     address: sale.address || "",
-    starts_at: toLocalInput(sale.starts_at),
-    ends_at: toLocalInput(sale.ends_at),
     default_reservation_minutes: String(sale.default_reservation_minutes),
   });
   const [savingSale, setSavingSale] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>(initialSavedLocations);
   const [locationLabel, setLocationLabel] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
+  const [dayRows, setDayRows] = useState<DayRow[]>(toDayRows(initialSaleDays));
 
   const siteUrl = siteOrigin(typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = `${siteUrl}/s/${sale.slug}`;
@@ -78,18 +80,67 @@ export default function SaleAdmin({
     [items]
   );
 
+  function addDay() {
+    setDayRows((prev) => {
+      const last = prev[prev.length - 1];
+      return [
+        ...prev,
+        {
+          key: Math.random().toString(36).slice(2),
+          date: "",
+          start_time: last?.start_time || "09:00",
+          end_time: last?.end_time || "14:00",
+        },
+      ];
+    });
+  }
+
+  function updateDay(key: string, patch: Partial<DayRow>) {
+    setDayRows((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)));
+  }
+
+  function removeDay(key: string) {
+    setDayRows((prev) => prev.filter((d) => d.key !== key));
+  }
+
   async function saveSaleSettings() {
+    setSaveError("");
+    const validDays = dayRows.filter((d) => d.date && d.start_time && d.end_time);
+    const dates = validDays.map((d) => d.date);
+    if (new Set(dates).size !== dates.length) {
+      setSaveError("Each day can only be listed once — remove the duplicate date.");
+      return;
+    }
+
     setSavingSale(true);
     const supabase = createClient();
     const patch = {
       name: saleForm.name.trim() || sale.name,
       tagline: saleForm.tagline.trim(),
       address: saleForm.address.trim(),
-      starts_at: fromLocalInput(saleForm.starts_at),
-      ends_at: fromLocalInput(saleForm.ends_at),
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
     };
     const { data, error } = await supabase.from("sales").update(patch).eq("id", sale.id).select().single();
+
+    await supabase.from("sale_days").delete().eq("sale_id", sale.id);
+    let savedDays: SaleDay[] = [];
+    if (validDays.length > 0) {
+      const { data: daysData, error: daysError } = await supabase
+        .from("sale_days")
+        .insert(
+          validDays.map((d) => ({
+            sale_id: sale.id,
+            date: d.date,
+            start_time: d.start_time,
+            end_time: d.end_time,
+          }))
+        )
+        .select();
+      if (daysError) setSaveError(daysError.message);
+      savedDays = daysData || [];
+    }
+    setDayRows(toDayRows(savedDays));
+
     setSavingSale(false);
     if (!error && data) setSale(data);
   }
@@ -353,23 +404,50 @@ export default function SaleAdmin({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="Sale starts">
-            <input
-              type="datetime-local"
-              value={saleForm.starts_at}
-              onChange={(e) => setSaleForm({ ...saleForm, starts_at: e.target.value })}
-              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
-            />
-          </Field>
-          <Field label="Sale ends">
-            <input
-              type="datetime-local"
-              value={saleForm.ends_at}
-              onChange={(e) => setSaleForm({ ...saleForm, ends_at: e.target.value })}
-              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
-            />
-          </Field>
+        <div className="mb-2.5">
+          <label className="block text-xs font-bold opacity-70 mb-1">Sale days</label>
+          {dayRows.length === 0 && <div className="text-xs opacity-60 mb-2">No days added yet.</div>}
+          <div className="space-y-2">
+            {dayRows.map((day) => (
+              <div key={day.key} className="flex gap-1.5 items-center flex-wrap">
+                <input
+                  type="date"
+                  value={day.date}
+                  onChange={(e) => updateDay(day.key, { date: e.target.value })}
+                  className="flex-1 min-w-[140px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
+                />
+                <input
+                  type="time"
+                  value={day.start_time}
+                  onChange={(e) => updateDay(day.key, { start_time: e.target.value })}
+                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
+                />
+                <span className="text-xs opacity-60">to</span>
+                <input
+                  type="time"
+                  value={day.end_time}
+                  onChange={(e) => updateDay(day.key, { end_time: e.target.value })}
+                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeDay(day.key)}
+                  className="text-xs opacity-50 hover:opacity-90 px-1.5"
+                  aria-label="Remove day"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={addDay}
+            disabled={dayRows.length >= MAX_SALE_DAYS}
+            className="mt-2 border-2 border-cardboard-dark bg-white font-bold px-3 py-1.5 rounded-lg text-xs disabled:opacity-50"
+          >
+            + Add a day
+          </button>
         </div>
         <Field label="Default reservation window (minutes)">
           <input
@@ -380,6 +458,7 @@ export default function SaleAdmin({
             className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
           />
         </Field>
+        {saveError && <div className="text-marker text-sm font-semibold mb-2">{saveError}</div>}
         <button
           onClick={saveSaleSettings}
           disabled={savingSale}
