@@ -115,8 +115,8 @@ export default function SaleAdmin({
     setSavingSale(true);
     const supabase = createClient();
     const patch = {
-      name: saleForm.name.trim() || sale.name,
-      tagline: saleForm.tagline.trim(),
+      name: saleForm.name.trim().slice(0, 50) || sale.name,
+      tagline: saleForm.tagline.trim().slice(0, 75),
       address: saleForm.address.trim(),
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
     };
@@ -280,7 +280,7 @@ export default function SaleAdmin({
       <a href="/dashboard" className="text-sm font-semibold opacity-70">
         ← All sales
       </a>
-      <div className="font-marker text-3xl text-marker -rotate-1 mt-2 mb-5">{sale.name}</div>
+      <div className="font-marker text-3xl text-marker -rotate-1 mt-2 mb-5 break-words">{sale.name}</div>
 
       {/* stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-5">
@@ -336,16 +336,20 @@ export default function SaleAdmin({
         <Field label="Sale name">
           <input
             value={saleForm.name}
-            onChange={(e) => setSaleForm({ ...saleForm, name: e.target.value })}
+            onChange={(e) => setSaleForm({ ...saleForm, name: e.target.value.slice(0, 50) })}
+            maxLength={50}
             className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
           />
+          <div className="text-[11px] opacity-50 mt-1 text-right">{saleForm.name.length}/50</div>
         </Field>
         <Field label="Tagline">
           <input
             value={saleForm.tagline}
-            onChange={(e) => setSaleForm({ ...saleForm, tagline: e.target.value })}
+            onChange={(e) => setSaleForm({ ...saleForm, tagline: e.target.value.slice(0, 75) })}
+            maxLength={75}
             className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
           />
+          <div className="text-[11px] opacity-50 mt-1 text-right">{saleForm.tagline.length}/75</div>
         </Field>
         <Field label="Address">
           <textarea
