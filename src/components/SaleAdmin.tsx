@@ -48,7 +48,7 @@ export default function SaleAdmin({
   const [saleForm, setSaleForm] = useState({
     name: sale.name,
     tagline: sale.tagline,
-    address: sale.address,
+    address: sale.address || "",
     starts_at: toLocalInput(sale.starts_at),
     ends_at: toLocalInput(sale.ends_at),
     default_reservation_minutes: String(sale.default_reservation_minutes),
