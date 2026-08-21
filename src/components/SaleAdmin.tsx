@@ -349,6 +349,24 @@ export default function SaleAdmin({
     setSaleModalItem(null);
   }
 
+  async function restockItem(id: string) {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("items")
+      .update({
+        status: "available",
+        sold_at: null,
+        revenue: 0,
+        reserved_name: null,
+        reserved_phone: null,
+        reserved_at: null,
+      })
+      .eq("id", id)
+      .select("*, item_photos(*)")
+      .single();
+    if (!error && data) setItems((prev) => prev.map((i) => (i.id === id ? data : i)));
+  }
+
   async function cancelReservation(id: string) {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -758,6 +776,9 @@ export default function SaleAdmin({
                   <SmallBtn dark onClick={() => setSaleModalItem(item)}>
                     Mark sold
                   </SmallBtn>
+                )}
+                {!isBulkItem(item) && item.status === "sold" && (
+                  <SmallBtn onClick={() => restockItem(item.id)}>Restock</SmallBtn>
                 )}
                 {item.status === "reserved" && <SmallBtn onClick={() => cancelReservation(item.id)}>Cancel hold</SmallBtn>}
                 {confirmDeleteId === item.id ? (
