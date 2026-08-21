@@ -57,6 +57,7 @@ export default function SaleAdmin({
   const [editForm, setEditForm] = useState<any>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [photosOpenId, setPhotosOpenId] = useState<string | null>(null);
+  const [saleModalItem, setSaleModalItem] = useState<Item | null>(null);
   const [saleForm, setSaleForm] = useState({
     name: sale.name,
     tagline: sale.tagline,
@@ -111,9 +112,7 @@ export default function SaleAdmin({
   }, [printJob]);
 
   const stats = useMemo(() => {
-    const unitsSold = (i: Item) =>
-      isBulkItem(i) ? i.quantity_total - i.quantity_available : i.status === "sold" ? 1 : 0;
-    const revenue = items.reduce((s, i) => s + unitsSold(i) * (Number(i.price) || 0), 0);
+    const revenue = items.reduce((s, i) => s + (Number(i.revenue) || 0), 0);
     return {
       total: items.length,
       available: items.filter((i) => i.status === "available").length,
@@ -327,15 +326,27 @@ export default function SaleAdmin({
     }
   }
 
-  async function markSold(id: string) {
+  async function confirmSale(price: number, qty: number) {
+    const item = saleModalItem;
+    if (!item) return;
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("items")
-      .update({ status: "sold", sold_at: new Date().toISOString() })
-      .eq("id", id)
-      .select("*, item_photos(*)")
-      .single();
-    if (!error && data) setItems((prev) => prev.map((i) => (i.id === id ? data : i)));
+    if (isBulkItem(item)) {
+      const { data, error } = await supabase.rpc("record_bulk_sale", {
+        p_item_id: item.id,
+        p_qty: qty,
+        p_unit_price: price,
+      });
+      if (!error && data) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...data } : i)));
+    } else {
+      const { data, error } = await supabase
+        .from("items")
+        .update({ status: "sold", sold_at: new Date().toISOString(), revenue: price })
+        .eq("id", item.id)
+        .select("*, item_photos(*)")
+        .single();
+      if (!error && data) setItems((prev) => prev.map((i) => (i.id === item.id ? data : i)));
+    }
+    setSaleModalItem(null);
   }
 
   async function cancelReservation(id: string) {
@@ -732,6 +743,7 @@ export default function SaleAdmin({
                         · {item.quantity_available}/{item.quantity_total} left
                       </>
                     )}
+                    {Number(item.revenue) > 0 && <> · {money(item.revenue)} collected</>}
                   </div>
                 </div>
               </div>
@@ -743,7 +755,7 @@ export default function SaleAdmin({
                   Photos ({item.item_photos?.length || 0})
                 </SmallBtn>
                 {!isBulkItem(item) && item.status !== "sold" && (
-                  <SmallBtn dark onClick={() => markSold(item.id)}>
+                  <SmallBtn dark onClick={() => setSaleModalItem(item)}>
                     Mark sold
                   </SmallBtn>
                 )}
@@ -756,7 +768,9 @@ export default function SaleAdmin({
                   <SmallBtn onClick={() => setConfirmDeleteId(item.id)}>Delete</SmallBtn>
                 )}
               </div>
-              {isBulkItem(item) && <BulkQuantityControls item={item} onAdjust={adjustQuantity} />}
+              {isBulkItem(item) && (
+                <BulkQuantityControls item={item} onAdjust={adjustQuantity} onRecordSale={() => setSaleModalItem(item)} />
+              )}
 
               {photosOpenId === item.id && (
                 <div className="mt-3 bg-chalk rounded-lg p-3">
@@ -880,6 +894,10 @@ export default function SaleAdmin({
         </div>
       </Card>
 
+      {saleModalItem && (
+        <SalePriceOverlay item={saleModalItem} onConfirm={confirmSale} onCancel={() => setSaleModalItem(null)} />
+      )}
+
       {printRoot &&
         printJob === "qr" &&
         createPortal(
@@ -963,11 +981,13 @@ function SmallBtn({
   onClick,
   dark,
   danger,
+  disabled,
 }: {
   children: React.ReactNode;
   onClick: () => void;
   dark?: boolean;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   const cls = danger
     ? "bg-marker text-white"
@@ -975,7 +995,11 @@ function SmallBtn({
     ? "bg-ink text-chalk"
     : "border-2 border-cardboard-dark bg-white";
   return (
-    <button onClick={onClick} className={`text-xs font-bold px-3 py-1.5 rounded-lg ${cls}`}>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-40 ${cls}`}
+    >
       {children}
     </button>
   );
@@ -995,11 +1019,12 @@ function StatusBadge({ status }: { status: Item["status"] }) {
 function BulkQuantityControls({
   item,
   onAdjust,
+  onRecordSale,
 }: {
   item: Item;
   onAdjust: (id: string, delta: number) => void;
+  onRecordSale: () => void;
 }) {
-  const [n, setN] = useState("1");
   return (
     <div className="flex items-center gap-1.5 flex-wrap mt-2 bg-chalk rounded-lg p-2">
       <span className="text-xs font-bold opacity-70 mr-1">
@@ -1007,22 +1032,81 @@ function BulkQuantityControls({
       </span>
       <SmallBtn onClick={() => onAdjust(item.id, -1)}>− sold 1</SmallBtn>
       <SmallBtn onClick={() => onAdjust(item.id, 1)}>+ restock 1</SmallBtn>
-      <input
-        type="number"
-        min={1}
-        value={n}
-        onChange={(e) => setN(e.target.value)}
-        className="w-16 px-2 py-1.5 border-2 border-cardboard-dark rounded-lg text-xs bg-white"
-      />
-      <SmallBtn
-        dark
-        onClick={() => {
-          const qty = Math.max(1, Number(n) || 1);
-          onAdjust(item.id, -qty);
-        }}
-      >
+      <SmallBtn dark onClick={onRecordSale} disabled={item.quantity_available <= 0}>
         Record sale
       </SmallBtn>
+    </div>
+  );
+}
+
+function SalePriceOverlay({
+  item,
+  onConfirm,
+  onCancel,
+}: {
+  item: Item;
+  onConfirm: (price: number, qty: number) => void;
+  onCancel: () => void;
+}) {
+  const bulk = isBulkItem(item);
+  const maxQty = Math.max(1, item.quantity_available);
+  const [price, setPrice] = useState(String(item.price));
+  const [qty, setQty] = useState("1");
+
+  function confirm() {
+    const p = Math.max(0, Number(price) || 0);
+    const q = bulk ? Math.min(maxQty, Math.max(1, Number(qty) || 1)) : 1;
+    onConfirm(p, q);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-ink/50 flex items-center justify-center z-50 p-4" onClick={onCancel}>
+      <div
+        className="bg-white border-2 border-cardboard-dark rounded-xl p-4 w-full max-w-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-sm font-bold mb-3">💰 Record sale — {item.name}</h3>
+        <Field label="Sale price ($)">
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            autoFocus
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && confirm()}
+            className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
+          />
+          <div className="text-[11px] opacity-50 mt-1">List price is {money(item.price)}.</div>
+        </Field>
+        {bulk && (
+          <Field label={`Quantity sold (${item.quantity_available} available)`}>
+            <div className="flex items-center gap-2">
+              <SmallBtn onClick={() => setQty(String(Math.max(1, (Number(qty) || 1) - 1)))}>−</SmallBtn>
+              <input
+                type="number"
+                min={1}
+                max={maxQty}
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                className="w-20 px-3 py-2 border-2 border-cardboard-dark rounded-lg text-center"
+              />
+              <SmallBtn onClick={() => setQty(String(Math.min(maxQty, (Number(qty) || 1) + 1)))}>+</SmallBtn>
+            </div>
+          </Field>
+        )}
+        <div className="flex gap-2 mt-3">
+          <button onClick={confirm} className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm flex-1">
+            Confirm sale
+          </button>
+          <button
+            onClick={onCancel}
+            className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -62,6 +62,7 @@ export interface Item {
   sort_order: number;
   quantity_total: number;
   quantity_available: number;
+  revenue: number;
   created_at: string;
   updated_at: string;
   item_photos?: ItemPhoto[];
