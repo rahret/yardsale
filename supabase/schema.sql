@@ -514,6 +514,41 @@ $$;
 grant execute on function public.record_bulk_sale(uuid, int, numeric) to authenticated;
 
 -- ----------------------------------------------------------------------------
+-- restock_bulk_item: reverses the sale of p_qty units of a bulk item,
+-- crediting them back to quantity_available and removing p_qty * p_unit_price
+-- from the item's accumulated revenue. p_qty is clamped to however many
+-- units are actually recorded as sold (quantity_total - quantity_available),
+-- and revenue never drops below 0. Runs with the caller's own privileges,
+-- same RLS policy as record_bulk_sale above.
+-- ----------------------------------------------------------------------------
+create or replace function public.restock_bulk_item(p_item_id uuid, p_qty int, p_unit_price numeric)
+returns public.items
+language plpgsql
+as $$
+declare
+  v_item public.items%rowtype;
+  v_restocked int;
+begin
+  select * into v_item from public.items where id = p_item_id for update;
+  if not found then
+    raise exception 'Item not found or not authorized';
+  end if;
+
+  v_restocked := greatest(0, least(p_qty, v_item.quantity_total - v_item.quantity_available));
+
+  update public.items
+  set quantity_available = quantity_available + v_restocked,
+      revenue = greatest(0, revenue - (v_restocked * p_unit_price))
+  where id = p_item_id
+  returning * into v_item;
+
+  return v_item;
+end;
+$$;
+
+grant execute on function public.restock_bulk_item(uuid, int, numeric) to authenticated;
+
+-- ----------------------------------------------------------------------------
 -- sweep_expired_reservations: flips any item whose reservation window has
 -- passed back to "available". Safe to call anonymously and often (the public
 -- shop page calls this on load and every ~4s while viewers are browsing).

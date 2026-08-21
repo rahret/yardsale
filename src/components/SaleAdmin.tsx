@@ -57,7 +57,7 @@ export default function SaleAdmin({
   const [editForm, setEditForm] = useState<any>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [photosOpenId, setPhotosOpenId] = useState<string | null>(null);
-  const [saleModalItem, setSaleModalItem] = useState<Item | null>(null);
+  const [saleModal, setSaleModal] = useState<{ item: Item; mode: "sell" | "restock" } | null>(null);
   const [saleForm, setSaleForm] = useState({
     name: sale.name,
     tagline: sale.tagline,
@@ -318,19 +318,18 @@ export default function SaleAdmin({
     }
   }
 
-  async function adjustQuantity(id: string, delta: number) {
+  async function confirmSaleModal(price: number, qty: number) {
+    if (!saleModal) return;
+    const { item, mode } = saleModal;
     const supabase = createClient();
-    const { data, error } = await supabase.rpc("adjust_item_quantity", { p_item_id: id, p_delta: delta });
-    if (!error && data) {
-      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...data } : i)));
-    }
-  }
-
-  async function confirmSale(price: number, qty: number) {
-    const item = saleModalItem;
-    if (!item) return;
-    const supabase = createClient();
-    if (isBulkItem(item)) {
+    if (mode === "restock") {
+      const { data, error } = await supabase.rpc("restock_bulk_item", {
+        p_item_id: item.id,
+        p_qty: qty,
+        p_unit_price: price,
+      });
+      if (!error && data) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...data } : i)));
+    } else if (isBulkItem(item)) {
       const { data, error } = await supabase.rpc("record_bulk_sale", {
         p_item_id: item.id,
         p_qty: qty,
@@ -346,7 +345,7 @@ export default function SaleAdmin({
         .single();
       if (!error && data) setItems((prev) => prev.map((i) => (i.id === item.id ? data : i)));
     }
-    setSaleModalItem(null);
+    setSaleModal(null);
   }
 
   async function restockItem(id: string) {
@@ -773,7 +772,7 @@ export default function SaleAdmin({
                   Photos ({item.item_photos?.length || 0})
                 </SmallBtn>
                 {!isBulkItem(item) && item.status !== "sold" && (
-                  <SmallBtn dark onClick={() => setSaleModalItem(item)}>
+                  <SmallBtn dark onClick={() => setSaleModal({ item, mode: "sell" })}>
                     Mark sold
                   </SmallBtn>
                 )}
@@ -790,7 +789,11 @@ export default function SaleAdmin({
                 )}
               </div>
               {isBulkItem(item) && (
-                <BulkQuantityControls item={item} onAdjust={adjustQuantity} onRecordSale={() => setSaleModalItem(item)} />
+                <BulkQuantityControls
+                  item={item}
+                  onRecordSale={() => setSaleModal({ item, mode: "sell" })}
+                  onRestock={() => setSaleModal({ item, mode: "restock" })}
+                />
               )}
 
               {photosOpenId === item.id && (
@@ -915,8 +918,13 @@ export default function SaleAdmin({
         </div>
       </Card>
 
-      {saleModalItem && (
-        <SalePriceOverlay item={saleModalItem} onConfirm={confirmSale} onCancel={() => setSaleModalItem(null)} />
+      {saleModal && (
+        <SalePriceOverlay
+          item={saleModal.item}
+          mode={saleModal.mode}
+          onConfirm={confirmSaleModal}
+          onCancel={() => setSaleModal(null)}
+        />
       )}
 
       {printRoot &&
@@ -1039,22 +1047,23 @@ function StatusBadge({ status }: { status: Item["status"] }) {
 
 function BulkQuantityControls({
   item,
-  onAdjust,
   onRecordSale,
+  onRestock,
 }: {
   item: Item;
-  onAdjust: (id: string, delta: number) => void;
   onRecordSale: () => void;
+  onRestock: () => void;
 }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap mt-2 bg-chalk rounded-lg p-2">
       <span className="text-xs font-bold opacity-70 mr-1">
         {item.quantity_available} / {item.quantity_total} left
       </span>
-      <SmallBtn onClick={() => onAdjust(item.id, -1)}>− sold 1</SmallBtn>
-      <SmallBtn onClick={() => onAdjust(item.id, 1)}>+ restock 1</SmallBtn>
       <SmallBtn dark onClick={onRecordSale} disabled={item.quantity_available <= 0}>
         Record sale
+      </SmallBtn>
+      <SmallBtn onClick={onRestock} disabled={item.quantity_available >= item.quantity_total}>
+        Restock
       </SmallBtn>
     </div>
   );
@@ -1062,15 +1071,19 @@ function BulkQuantityControls({
 
 function SalePriceOverlay({
   item,
+  mode,
   onConfirm,
   onCancel,
 }: {
   item: Item;
+  mode: "sell" | "restock";
   onConfirm: (price: number, qty: number) => void;
   onCancel: () => void;
 }) {
   const bulk = isBulkItem(item);
-  const maxQty = Math.max(1, item.quantity_available);
+  const restock = mode === "restock";
+  const unitsSold = item.quantity_total - item.quantity_available;
+  const maxQty = restock ? Math.max(1, unitsSold) : Math.max(1, item.quantity_available);
   const [price, setPrice] = useState(String(item.price));
   const [qty, setQty] = useState("1");
 
@@ -1086,8 +1099,10 @@ function SalePriceOverlay({
         className="bg-white border-2 border-cardboard-dark rounded-xl p-4 w-full max-w-sm"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-bold mb-3">💰 Record sale — {item.name}</h3>
-        <Field label="Sale price ($)">
+        <h3 className="text-sm font-bold mb-3">
+          {restock ? "↩️ Restock" : "💰 Record sale"} — {item.name}
+        </h3>
+        <Field label={restock ? "Price to reverse ($)" : "Sale price ($)"}>
           <input
             type="number"
             min={0}
@@ -1101,7 +1116,9 @@ function SalePriceOverlay({
           <div className="text-[11px] opacity-50 mt-1">List price is {money(item.price)}.</div>
         </Field>
         {bulk && (
-          <Field label={`Quantity sold (${item.quantity_available} available)`}>
+          <Field
+            label={restock ? `Quantity to restock (${unitsSold} sold)` : `Quantity sold (${item.quantity_available} available)`}
+          >
             <div className="flex items-center gap-2">
               <SmallBtn onClick={() => setQty(String(Math.max(1, (Number(qty) || 1) - 1)))}>−</SmallBtn>
               <input
@@ -1118,7 +1135,7 @@ function SalePriceOverlay({
         )}
         <div className="flex gap-2 mt-3">
           <button onClick={confirm} className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm flex-1">
-            Confirm sale
+            {restock ? "Confirm restock" : "Confirm sale"}
           </button>
           <button
             onClick={onCancel}
