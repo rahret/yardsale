@@ -26,6 +26,7 @@ export default function PhotoUploader({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   async function uploadFiles(files: FileList | File[]) {
     const supabase = createClient();
@@ -72,6 +73,26 @@ export default function PhotoUploader({
 
   return (
     <div>
+      <div className="flex gap-2 mb-2">
+        <button
+          type="button"
+          onClick={() => cameraInputRef.current?.click()}
+          className="flex-1 border-2 border-cardboard-dark bg-white font-bold px-3 py-2 rounded-lg text-sm"
+        >
+          📷 Take a photo
+        </button>
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) uploadFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+      </div>
       <div
         onDragOver={(e) => {
           e.preventDefault();
