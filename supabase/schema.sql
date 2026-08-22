@@ -237,6 +237,28 @@ alter table public.items drop column if exists reserved_history;
 alter table public.items add column if not exists quantity_total int not null default 1;
 alter table public.items add column if not exists quantity_available int not null default 1;
 
+-- revenue: actual $ collected for this item so far, tracked separately from
+-- `price` (the list price) because a seller may negotiate a different sale
+-- price per unit, and a bulk item can sell in several batches at different
+-- negotiated prices over time. Set on the single-item "mark sold" flow and
+-- accumulated by record_bulk_sale() below; `price` itself never changes when
+-- an item sells.
+alter table public.items add column if not exists revenue numeric(10, 2) not null default 0;
+
+-- backfill for items already marked sold before sale-price tracking existed —
+-- assume they sold at list price so the Revenue stat doesn't drop to zero.
+update public.items
+set revenue = case
+  when quantity_total > 1 then price * (quantity_total - quantity_available)
+  when status = 'sold' then price
+  else 0
+end
+where revenue = 0
+  and (
+    (quantity_total > 1 and quantity_available < quantity_total)
+    or (quantity_total = 1 and status = 'sold')
+  );
+
 alter table public.items drop constraint if exists items_status_check;
 alter table public.items add constraint items_status_check check (status in ('available', 'reserved', 'sold', 'low_stock'));
 
@@ -418,10 +440,14 @@ create trigger items_sync_status
 
 -- ----------------------------------------------------------------------------
 -- adjust_item_quantity: atomically bumps a bulk item's live available count
--- (positive delta to restock/undo, negative delta to record units just sold),
--- clamped to [0, quantity_total]. Runs with the caller's own privileges, so
--- the existing "owners can update items in their own sales" RLS policy is
--- still what decides who is allowed to call this successfully.
+-- (positive delta to restock/undo, negative delta to record a quick sale of
+-- units at list price), clamped to [0, quantity_total]. Revenue moves with
+-- the actual (clamped) quantity change, priced at the item's current list
+-- price — this is the fast no-prompt path (the "− sold 1" / "+ restock 1"
+-- buttons); negotiated-price sales go through record_bulk_sale() instead.
+-- Runs with the caller's own privileges, so the existing "owners can update
+-- items in their own sales" RLS policy is still what decides who is allowed
+-- to call this successfully.
 -- ----------------------------------------------------------------------------
 create or replace function public.adjust_item_quantity(p_item_id uuid, p_delta int)
 returns public.items
@@ -429,21 +455,98 @@ language plpgsql
 as $$
 declare
   v_item public.items%rowtype;
+  v_after int;
+  v_actual_delta int;
 begin
-  update public.items
-  set quantity_available = greatest(0, least(quantity_total, quantity_available + p_delta))
-  where id = p_item_id
-  returning * into v_item;
-
+  select * into v_item from public.items where id = p_item_id for update;
   if not found then
     raise exception 'Item not found or not authorized';
   end if;
+
+  v_after := greatest(0, least(v_item.quantity_total, v_item.quantity_available + p_delta));
+  v_actual_delta := v_after - v_item.quantity_available;
+
+  update public.items
+  set quantity_available = v_after,
+      revenue = greatest(0, revenue - v_actual_delta * price)
+  where id = p_item_id
+  returning * into v_item;
 
   return v_item;
 end;
 $$;
 
 grant execute on function public.adjust_item_quantity(uuid, int) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- record_bulk_sale: records the sale of p_qty units of a bulk item at a
+-- (possibly negotiated) p_unit_price, decrementing quantity_available and
+-- adding to the item's accumulated revenue in one atomic step. p_qty is
+-- clamped to however many units are actually available, so revenue never
+-- counts more units than were really sold. Runs with the caller's own
+-- privileges, same RLS policy as adjust_item_quantity above.
+-- ----------------------------------------------------------------------------
+create or replace function public.record_bulk_sale(p_item_id uuid, p_qty int, p_unit_price numeric)
+returns public.items
+language plpgsql
+as $$
+declare
+  v_item public.items%rowtype;
+  v_sold int;
+begin
+  select * into v_item from public.items where id = p_item_id for update;
+  if not found then
+    raise exception 'Item not found or not authorized';
+  end if;
+
+  v_sold := greatest(0, least(p_qty, v_item.quantity_available));
+
+  update public.items
+  set quantity_available = quantity_available - v_sold,
+      revenue = revenue + (v_sold * p_unit_price)
+  where id = p_item_id
+  returning * into v_item;
+
+  return v_item;
+end;
+$$;
+
+grant execute on function public.record_bulk_sale(uuid, int, numeric) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- restock_bulk_item: reverses the sale of p_qty units of a bulk item,
+-- crediting them back to quantity_available and removing p_qty * p_unit_price
+-- from the item's accumulated revenue. p_qty is clamped to however many
+-- units are actually recorded as sold (quantity_total - quantity_available),
+-- and revenue never drops below 0. Runs with the caller's own privileges,
+-- same RLS policy as record_bulk_sale above.
+-- ----------------------------------------------------------------------------
+create or replace function public.restock_bulk_item(p_item_id uuid, p_qty int, p_unit_price numeric)
+returns public.items
+language plpgsql
+as $$
+declare
+  v_item public.items%rowtype;
+  v_restocked int;
+begin
+  select * into v_item from public.items where id = p_item_id for update;
+  if not found then
+    raise exception 'Item not found or not authorized';
+  end if;
+
+  v_restocked := greatest(0, least(p_qty, v_item.quantity_total - v_item.quantity_available));
+
+  update public.items
+  set quantity_available = quantity_available + v_restocked,
+      revenue = greatest(0, revenue - (v_restocked * p_unit_price))
+  where id = p_item_id
+  returning * into v_item;
+
+  return v_item;
+end;
+$$;
+
+grant execute on function public.restock_bulk_item(uuid, int, numeric) to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- sweep_expired_reservations: flips any item whose reservation window has
