@@ -96,6 +96,22 @@ export function formatSaleDay(day: Pick<SaleDay, "date" | "start_time" | "end_ti
   return `${dateStr} · ${formatTime(day.start_time)} – ${formatTime(day.end_time)}`;
 }
 
+/** Compact clock time for printed signs: drops ":00" minutes and the "M"
+ * from AM/PM, e.g. "09:00" -> "9A", "14:00" -> "2P", "09:30" -> "9:30A". */
+export function formatSignTime(t: string): string {
+  const [h, m] = t.split(":").map(Number);
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  const minutes = m ? `:${String(m).padStart(2, "0")}` : "";
+  return `${hour12}${minutes}${h < 12 ? "A" : "P"}`;
+}
+
+/** Compact sale_days line for printed signs, e.g. "Fri, Aug 15 · 9A – 4P". */
+export function formatSignSaleDay(day: Pick<SaleDay, "date" | "start_time" | "end_time">): string {
+  const date = new Date(day.date + "T00:00:00");
+  const dateStr = date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return `${dateStr} · ${formatSignTime(day.start_time)} – ${formatSignTime(day.end_time)}`;
+}
+
 export function sortSaleDays(days: SaleDay[]): SaleDay[] {
   return [...days].sort((a, b) => a.date.localeCompare(b.date));
 }

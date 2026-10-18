@@ -5,8 +5,9 @@ import { createPortal } from "react-dom";
 import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
-import { EMOJI_PRESETS, formatAddress, formatSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
+import { EMOJI_PRESETS, formatAddress, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
+import FitText from "@/components/FitText";
 
 const MAX_SALE_DAYS = 7;
 
@@ -100,12 +101,19 @@ export default function SaleAdmin({
 
   useEffect(() => {
     if (!printJob) return;
-    const t = setTimeout(() => window.print(), 60);
+    // Wait for web fonts so the sign's fit-to-width text is measured with the
+    // real font before the print dialog snapshots the page.
+    let t: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+    (document.fonts?.ready ?? Promise.resolve()).then(() => {
+      if (!cancelled) t = setTimeout(() => window.print(), 60);
+    });
     function onAfterPrint() {
       setPrintJob(null);
     }
     window.addEventListener("afterprint", onAfterPrint);
     return () => {
+      cancelled = true;
       clearTimeout(t);
       window.removeEventListener("afterprint", onAfterPrint);
     };
@@ -947,27 +955,21 @@ export default function SaleAdmin({
       {printRoot &&
         printJob === "sign" &&
         createPortal(
-          <div className="hidden print:flex flex-col items-center text-center w-full h-full p-4 gap-4">
-            <div className="text-9xl font-extrabold uppercase tracking-wide">Yard Sale</div>
-            <div className="flex flex-1 w-full items-stretch justify-center gap-6 min-h-0">
-              <div className="flex-1 flex items-center justify-center">
-                <QRCodeSVG
-                  value={shareUrl}
-                  fgColor="#000000"
-                  style={{ width: "min(47vw, 88vh)", height: "min(47vw, 88vh)" }}
-                />
+          <div className="hidden print:flex flex-col w-full h-full p-4 gap-[2vw]">
+            {/* Title, address, and dates/times each render at the largest size
+                that fits their width on one line (see FitText). The QR code and
+                the details column each take ~half the width, with a small gap. */}
+            <FitText lines={["YARD SALE"]} fontWeight={800} />
+            <div className="flex flex-1 w-full items-center gap-[4%] min-h-0">
+              <div className="w-[48%] h-full flex items-center justify-center min-h-0">
+                <QRCodeSVG value={shareUrl} fgColor="#000000" style={{ width: "100%", height: "100%" }} />
               </div>
-              <div className="w-1 bg-ink/25 self-stretch" />
-              <div className="flex-1 flex flex-col items-center justify-center gap-5">
-                {sale.street && <div className="text-3xl font-semibold">{sale.street}</div>}
+              <div className="w-[48%] flex flex-col items-center justify-center gap-[3vw]">
+                {sale.street && <FitText lines={[sale.street]} />}
                 {sortedDayRows.length > 0 ? (
-                  sortedDayRows.map((d) => (
-                    <div key={d.key} className="text-4xl font-semibold leading-snug">
-                      {formatSaleDay(d)}
-                    </div>
-                  ))
+                  <FitText lines={sortedDayRows.map(formatSignSaleDay)} />
                 ) : (
-                  <div className="text-2xl opacity-60">Dates &amp; times coming soon</div>
+                  <FitText lines={["Dates & times coming soon"]} className="opacity-60" />
                 )}
               </div>
             </div>
