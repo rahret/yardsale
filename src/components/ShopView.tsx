@@ -406,8 +406,6 @@ function DetailSheet({
     onReserved({
       ...item,
       status: "reserved",
-      reserved_name: name.trim(),
-      reserved_phone: phone.trim(),
       reserved_at: new Date().toISOString(),
     });
   }

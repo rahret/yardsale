@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
-import { EMOJI_PRESETS, formatAddress, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
+import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import FitText from "@/components/FitText";
 
@@ -277,7 +277,7 @@ export default function SaleAdmin({
         quantity_total: quantityTotal,
         quantity_available: quantityTotal,
       })
-      .select("*, item_photos(*)")
+      .select(ITEM_SELECT)
       .single();
     if (error) {
       setAddError(error.message);
@@ -326,7 +326,7 @@ export default function SaleAdmin({
       .from("items")
       .update(patch)
       .eq("id", id)
-      .select("*, item_photos(*)")
+      .select(ITEM_SELECT)
       .single();
     if (!error && data) {
       setItems((prev) => prev.map((i) => (i.id === id ? data : i)));
@@ -357,7 +357,7 @@ export default function SaleAdmin({
         .from("items")
         .update({ status: "sold", sold_at: new Date().toISOString(), revenue: price })
         .eq("id", item.id)
-        .select("*, item_photos(*)")
+        .select(ITEM_SELECT)
         .single();
       if (!error && data) setItems((prev) => prev.map((i) => (i.id === item.id ? data : i)));
     }
@@ -372,12 +372,10 @@ export default function SaleAdmin({
         status: "available",
         sold_at: null,
         revenue: 0,
-        reserved_name: null,
-        reserved_phone: null,
         reserved_at: null,
       })
       .eq("id", id)
-      .select("*, item_photos(*)")
+      .select(ITEM_SELECT)
       .single();
     if (!error && data) setItems((prev) => prev.map((i) => (i.id === id ? data : i)));
   }
@@ -386,9 +384,9 @@ export default function SaleAdmin({
     const supabase = createClient();
     const { data, error } = await supabase
       .from("items")
-      .update({ status: "available", reserved_name: null, reserved_phone: null, reserved_at: null })
+      .update({ status: "available", reserved_at: null })
       .eq("id", id)
-      .select("*, item_photos(*)")
+      .select(ITEM_SELECT)
       .single();
     if (!error && data) setItems((prev) => prev.map((i) => (i.id === id ? data : i)));
   }
@@ -779,7 +777,15 @@ export default function SaleAdmin({
                   <div className="font-bold text-sm">{item.name}</div>
                   <div className="text-xs opacity-60">
                     {money(item.price)} · {item.category} · <StatusBadge status={item.status} />
-                    {item.status === "reserved" && <> · held by {item.reserved_name}</>}
+                    {item.status === "reserved" && item.item_holds && (
+                      <>
+                        {" "}
+                        · held by {item.item_holds.name} ·{" "}
+                        <a href={`tel:${item.item_holds.phone}`} className="underline">
+                          {formatPhone(item.item_holds.phone)}
+                        </a>
+                      </>
+                    )}
                     {isBulkItem(item) && (
                       <>
                         {" "}

@@ -16,7 +16,6 @@ export interface Sale extends Address {
   tagline: string;
   default_reservation_minutes: number;
   status: SaleStatus;
-  reserved_history: string[];
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +44,15 @@ export interface ItemPhoto {
   created_at: string;
 }
 
+/** Buyer contact for a reserved item. Private: readable only by the sale's owner. */
+export interface ItemHold {
+  item_id: string;
+  sale_id: string;
+  name: string;
+  phone: string;
+  created_at: string;
+}
+
 export interface Item {
   id: string;
   sale_id: string;
@@ -55,8 +63,6 @@ export interface Item {
   icon: string;
   status: ItemStatus;
   reservation_minutes: number | null;
-  reserved_name: string | null;
-  reserved_phone: string | null;
   reserved_at: string | null;
   sold_at: string | null;
   sort_order: number;
@@ -66,6 +72,8 @@ export interface Item {
   created_at: string;
   updated_at: string;
   item_photos?: ItemPhoto[];
+  /** Who is holding this item — only returned to the sale's owner. */
+  item_holds?: ItemHold | null;
 }
 
 export interface PaymentOptions {

@@ -65,6 +65,11 @@ function LoginForm() {
               placeholder="••••••••"
             />
           </div>
+          <div className="text-right -mt-2">
+            <Link href="/forgot-password" className="text-xs text-grass-dark font-semibold underline">
+              Forgot password?
+            </Link>
+          </div>
           {error && <div className="text-marker text-sm font-semibold">{error}</div>}
           <button
             type="submit"

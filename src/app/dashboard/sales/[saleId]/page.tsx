@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import SaleAdmin from "@/components/SaleAdmin";
+import { ITEM_SELECT } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export default async function SaleAdminPage({ params }: { params: { saleId: stri
 
   const { data: items } = await supabase
     .from("items")
-    .select("*, item_photos(*)")
+    .select(ITEM_SELECT)
     .eq("sale_id", params.saleId)
     .order("created_at", { ascending: false });
 
