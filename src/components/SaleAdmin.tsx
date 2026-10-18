@@ -5,19 +5,28 @@ import { createPortal } from "react-dom";
 import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
-import { EMOJI_PRESETS, formatAddress, formatSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
+import { EMOJI_PRESETS, formatAddress, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
+import FitText from "@/components/FitText";
 
 const MAX_SALE_DAYS = 7;
 
 type DayRow = { key: string; date: string; start_time: string; end_time: string };
 
+// Sale times are picked by the hour only, so stored times are snapped to "HH:00".
+const toHour = (t: string) => `${t.slice(0, 2)}:00`;
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
+  value: `${String(h).padStart(2, "0")}:00`,
+  label: `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? "AM" : "PM"}`,
+}));
+
 function toDayRows(days: SaleDay[]): DayRow[] {
   return sortSaleDays(days).map((d) => ({
     key: d.id,
     date: d.date,
-    start_time: d.start_time.slice(0, 5),
-    end_time: d.end_time.slice(0, 5),
+    start_time: toHour(d.start_time),
+    end_time: toHour(d.end_time),
   }));
 }
 
@@ -100,12 +109,19 @@ export default function SaleAdmin({
 
   useEffect(() => {
     if (!printJob) return;
-    const t = setTimeout(() => window.print(), 60);
+    // Wait for web fonts so the sign's fit-to-width text is measured with the
+    // real font before the print dialog snapshots the page.
+    let t: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+    (document.fonts?.ready ?? Promise.resolve()).then(() => {
+      if (!cancelled) t = setTimeout(() => window.print(), 60);
+    });
     function onAfterPrint() {
       setPrintJob(null);
     }
     window.addEventListener("afterprint", onAfterPrint);
     return () => {
+      cancelled = true;
       clearTimeout(t);
       window.removeEventListener("afterprint", onAfterPrint);
     };
@@ -586,19 +602,29 @@ export default function SaleAdmin({
                   onChange={(e) => updateDay(day.key, { date: e.target.value })}
                   className="flex-1 min-w-[140px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
                 />
-                <input
-                  type="time"
+                <select
                   value={day.start_time}
                   onChange={(e) => updateDay(day.key, { start_time: e.target.value })}
-                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
-                />
+                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm bg-white"
+                >
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
                 <span className="text-xs opacity-60">to</span>
-                <input
-                  type="time"
+                <select
                   value={day.end_time}
                   onChange={(e) => updateDay(day.key, { end_time: e.target.value })}
-                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
-                />
+                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm bg-white"
+                >
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={() => removeDay(day.key)}
@@ -947,27 +973,21 @@ export default function SaleAdmin({
       {printRoot &&
         printJob === "sign" &&
         createPortal(
-          <div className="hidden print:flex flex-col items-center text-center w-full h-full p-4 gap-4">
-            <div className="text-9xl font-extrabold uppercase tracking-wide">Yard Sale</div>
-            <div className="flex flex-1 w-full items-stretch justify-center gap-6 min-h-0">
-              <div className="flex-1 flex items-center justify-center">
-                <QRCodeSVG
-                  value={shareUrl}
-                  fgColor="#000000"
-                  style={{ width: "min(47vw, 88vh)", height: "min(47vw, 88vh)" }}
-                />
+          <div className="hidden print:flex flex-col w-full h-full p-4 gap-[2vw]">
+            {/* Title, address, and dates/times each render at the largest size
+                that fits their width on one line (see FitText). The QR code and
+                the details column each take ~half the width, with a small gap. */}
+            <FitText lines={["YARD SALE"]} fontWeight={800} />
+            <div className="flex flex-1 w-full items-center gap-[4%] min-h-0">
+              <div className="w-[48%] h-full flex items-center justify-center min-h-0">
+                <QRCodeSVG value={shareUrl} fgColor="#000000" style={{ width: "100%", height: "100%" }} />
               </div>
-              <div className="w-1 bg-ink/25 self-stretch" />
-              <div className="flex-1 flex flex-col items-center justify-center gap-5">
-                {sale.street && <div className="text-3xl font-semibold">{sale.street}</div>}
+              <div className="w-[48%] flex flex-col items-center justify-center gap-[3vw]">
+                {sale.street && <FitText lines={[sale.street]} />}
                 {sortedDayRows.length > 0 ? (
-                  sortedDayRows.map((d) => (
-                    <div key={d.key} className="text-4xl font-semibold leading-snug">
-                      {formatSaleDay(d)}
-                    </div>
-                  ))
+                  <FitText lines={sortedDayRows.map(formatSignSaleDay)} />
                 ) : (
-                  <div className="text-2xl opacity-60">Dates &amp; times coming soon</div>
+                  <FitText lines={["Dates & times coming soon"]} className="opacity-60" />
                 )}
               </div>
             </div>
