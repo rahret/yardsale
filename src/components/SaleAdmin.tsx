@@ -13,12 +13,20 @@ const MAX_SALE_DAYS = 7;
 
 type DayRow = { key: string; date: string; start_time: string; end_time: string };
 
+// Sale times are picked by the hour only, so stored times are snapped to "HH:00".
+const toHour = (t: string) => `${t.slice(0, 2)}:00`;
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
+  value: `${String(h).padStart(2, "0")}:00`,
+  label: `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? "AM" : "PM"}`,
+}));
+
 function toDayRows(days: SaleDay[]): DayRow[] {
   return sortSaleDays(days).map((d) => ({
     key: d.id,
     date: d.date,
-    start_time: d.start_time.slice(0, 5),
-    end_time: d.end_time.slice(0, 5),
+    start_time: toHour(d.start_time),
+    end_time: toHour(d.end_time),
   }));
 }
 
@@ -594,19 +602,29 @@ export default function SaleAdmin({
                   onChange={(e) => updateDay(day.key, { date: e.target.value })}
                   className="flex-1 min-w-[140px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
                 />
-                <input
-                  type="time"
+                <select
                   value={day.start_time}
                   onChange={(e) => updateDay(day.key, { start_time: e.target.value })}
-                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
-                />
+                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm bg-white"
+                >
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
                 <span className="text-xs opacity-60">to</span>
-                <input
-                  type="time"
+                <select
                   value={day.end_time}
                   onChange={(e) => updateDay(day.key, { end_time: e.target.value })}
-                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
-                />
+                  className="w-[110px] px-2 py-2 border-2 border-cardboard-dark rounded-lg text-sm bg-white"
+                >
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
                   onClick={() => removeDay(day.key)}
