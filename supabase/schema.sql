@@ -115,13 +115,9 @@ create table if not exists public.sales (
   zip text not null default '',
   default_reservation_minutes int not null default 30,
   status text not null default 'draft' check (status in ('draft', 'live', 'ended')),
-  reserved_history text[] not null default '{}', -- normalized phone numbers that already reserved an item in this sale
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
--- backfill for databases created before these columns existed
-alter table public.sales add column if not exists reserved_history text[] not null default '{}';
 
 -- address was originally one free-text field; split into street/city/state/zip
 -- so the app never has to guess where "street" ends inside a comma-joined
@@ -270,9 +266,7 @@ create table if not exists public.items (
   icon text not null default '📦',
   status text not null default 'available' check (status in ('available', 'reserved', 'sold', 'low_stock')),
   reservation_minutes int, -- null = use sale.default_reservation_minutes
-  reserved_name text,
-  reserved_phone text,
-  reserved_at timestamptz,
+  reserved_at timestamptz, -- the buyer's name/phone live in the private item_holds table
   sold_at timestamptz,
   sort_order int not null default 0,
   -- quantity_total = starting quantity (shown to buyers), quantity_available =
@@ -284,8 +278,8 @@ create table if not exists public.items (
   updated_at timestamptz not null default now()
 );
 
--- reservation history moved to sales.reserved_history: buyers are now
--- limited to one reservation per person per sale, not per item.
+-- per-item reservation history was replaced by the private
+-- reservation_log table (one reservation per person per sale).
 alter table public.items drop column if exists reserved_history;
 
 -- backfill for databases created before quantity tracking existed
@@ -417,6 +411,97 @@ create policy "Owners can delete photos for their own items"
   );
 
 -- ----------------------------------------------------------------------------
+-- item_holds: who is holding a reserved item (buyer name + phone). Kept out of
+-- `items` because items are publicly readable on live sales — only the sale's
+-- owner may see who reserved what. One row per currently-reserved item;
+-- written by reserve_item() and removed automatically when the item stops
+-- being reserved (see items_clear_hold below).
+-- ----------------------------------------------------------------------------
+create table if not exists public.item_holds (
+  item_id uuid primary key references public.items (id) on delete cascade,
+  sale_id uuid not null references public.sales (id) on delete cascade,
+  name text not null,
+  phone text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists item_holds_sale_id_idx on public.item_holds (sale_id);
+
+alter table public.item_holds enable row level security;
+
+drop policy if exists "Owners can view holds on their own sales" on public.item_holds;
+create policy "Owners can view holds on their own sales"
+  on public.item_holds for select
+  using (exists (select 1 from public.sales s where s.id = item_holds.sale_id and s.owner_id = auth.uid()));
+
+drop policy if exists "Owners can delete holds on their own sales" on public.item_holds;
+create policy "Owners can delete holds on their own sales"
+  on public.item_holds for delete
+  using (exists (select 1 from public.sales s where s.id = item_holds.sale_id and s.owner_id = auth.uid()));
+
+-- ----------------------------------------------------------------------------
+-- reservation_log: one row per successful reservation. Not readable by any
+-- app user (no policies/grants) — only reserve_item() touches it, to enforce
+-- one reservation per phone number per sale and per-device rate limits.
+-- ----------------------------------------------------------------------------
+create table if not exists public.reservation_log (
+  id bigint generated always as identity primary key,
+  sale_id uuid not null references public.sales (id) on delete cascade,
+  phone text not null, -- normalized digits only
+  client_ip text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists reservation_log_sale_phone_idx on public.reservation_log (sale_id, phone);
+create index if not exists reservation_log_ip_idx on public.reservation_log (client_ip, created_at);
+
+alter table public.reservation_log enable row level security;
+
+-- one-time migration for databases created before item_holds/reservation_log:
+-- buyer names/phones used to live on publicly readable items/sales columns.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'items' and column_name = 'reserved_phone') then
+    insert into public.item_holds (item_id, sale_id, name, phone, created_at)
+    select id, sale_id, coalesce(reserved_name, ''), reserved_phone, coalesce(reserved_at, now())
+    from public.items
+    where status = 'reserved' and reserved_phone is not null
+    on conflict (item_id) do nothing;
+    alter table public.items drop column if exists reserved_name;
+    alter table public.items drop column reserved_phone;
+  end if;
+
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'sales' and column_name = 'reserved_history') then
+    insert into public.reservation_log (sale_id, phone)
+    select s.id, h.phone from public.sales s, unnest(s.reserved_history) as h(phone);
+    alter table public.sales drop column reserved_history;
+  end if;
+end;
+$$;
+
+-- remove the hold row whenever an item stops being reserved (sold, released
+-- by the seller, expired by sweep_expired_reservations, ...).
+create or replace function public.clear_item_hold()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if new.status <> 'reserved' then
+    delete from public.item_holds where item_id = new.id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists items_clear_hold on public.items;
+create trigger items_clear_hold
+  after update of status on public.items
+  for each row execute procedure public.clear_item_hold();
+
+-- ----------------------------------------------------------------------------
 -- GRANTS: Row Level Security only restricts which *rows* a role can touch —
 -- the role still needs baseline table-level privileges before RLS is even
 -- evaluated. Some Supabase projects don't pre-grant these to anon/authenticated
@@ -428,6 +513,7 @@ grant usage on schema public to anon, authenticated;
 
 grant select, update on public.profiles to anon, authenticated;
 grant select on public.account_billing to authenticated;
+grant select, delete on public.item_holds to authenticated;
 grant select, insert, update, delete on public.sales to anon, authenticated;
 grant select, insert, update, delete on public.sale_days to anon, authenticated;
 grant select, insert, update, delete on public.items to anon, authenticated;
@@ -481,8 +567,6 @@ begin
       end if;
     end if;
     -- bulk items are never reservable, so they should never carry hold state
-    new.reserved_name := null;
-    new.reserved_phone := null;
     new.reserved_at := null;
   end if;
   return new;
@@ -617,8 +701,6 @@ as $$
 begin
   update public.items i
   set status = 'available',
-      reserved_name = null,
-      reserved_phone = null,
       reserved_at = null
   from public.sales s
   where i.sale_id = s.id
@@ -633,11 +715,17 @@ grant execute on function public.sweep_expired_reservations(uuid) to anon, authe
 -- ----------------------------------------------------------------------------
 -- reserve_item: the only way a buyer can place a hold on an item. Runs as a
 -- single atomic transaction so two people racing for the same item can't both
--- win it, enforces "one reservation per person per sale" (tracked on
--- sales.reserved_history, not per item), respects the sale being live, and
--- auto-expires stale reservations first. The sales row is locked for the
--- duration of the transaction so two concurrent reservation attempts by the
--- same phone number (on different items) can't both slip past the check.
+-- win it, respects the sale being live, and auto-expires stale reservations
+-- first. Abuse limits (all tracked in the private reservation_log):
+--   * the phone must look like a real US/Canada number (10 digits, valid area
+--     code and exchange, not one repeated digit);
+--   * one reservation per phone number per sale;
+--   * per device (client IP, when the request carries one): at most 3
+--     reservations per sale and 10 across all sales per hour, so one person
+--     can't hold everything by typing made-up numbers. (Kept loose because
+--     mobile carriers often share one IP across many phones.)
+-- The sales row is locked for the duration of the transaction so concurrent
+-- attempts on the same sale can't both slip past these checks.
 -- ----------------------------------------------------------------------------
 create or replace function public.reserve_item(
   p_item_id uuid,
@@ -653,15 +741,33 @@ declare
   v_sale public.sales%rowtype;
   v_norm_phone text;
   v_minutes int;
+  v_headers json;
+  v_ip text;
 begin
   v_norm_phone := regexp_replace(coalesce(p_phone, ''), '\D', '', 'g');
+  if length(v_norm_phone) = 11 and left(v_norm_phone, 1) = '1' then
+    v_norm_phone := substr(v_norm_phone, 2);
+  end if;
 
   if length(trim(coalesce(p_name, ''))) = 0 then
     return jsonb_build_object('success', false, 'error', 'Enter your name.');
   end if;
-  if length(v_norm_phone) < 7 then
-    return jsonb_build_object('success', false, 'error', 'Enter a valid phone number.');
+  if v_norm_phone !~ '^[2-9][0-9]{2}[2-9][0-9]{6}$' or v_norm_phone ~ '^(.)\1+$' then
+    return jsonb_build_object('success', false, 'error', 'Enter a valid 10-digit phone number.');
   end if;
+
+  -- Supabase passes the HTTP request headers to Postgres; prefer the
+  -- CDN-provided client IP, falling back to the first X-Forwarded-For hop.
+  begin
+    v_headers := nullif(current_setting('request.headers', true), '')::json;
+  exception when others then
+    v_headers := null;
+  end;
+  v_ip := nullif(trim(split_part(coalesce(
+    v_headers ->> 'cf-connecting-ip',
+    v_headers ->> 'x-forwarded-for',
+    v_headers ->> 'x-real-ip',
+    ''), ',', 1)), '');
 
   select * into v_item from public.items where id = p_item_id for update;
   if not found then
@@ -682,9 +788,6 @@ begin
   -- auto-expire a stale reservation before evaluating availability
   if v_item.status = 'reserved' and v_item.reserved_at + make_interval(mins => v_minutes) < now() then
     v_item.status := 'available';
-    v_item.reserved_name := null;
-    v_item.reserved_phone := null;
-    v_item.reserved_at := null;
   end if;
 
   if v_item.status = 'sold' then
@@ -693,20 +796,31 @@ begin
   if v_item.status = 'reserved' then
     return jsonb_build_object('success', false, 'error', 'Someone just reserved this — try another item!');
   end if;
-  if v_norm_phone = any(v_sale.reserved_history) then
+  if exists (select 1 from public.reservation_log where sale_id = v_sale.id and phone = v_norm_phone) then
     return jsonb_build_object('success', false, 'error', 'You''ve already made a reservation for this sale — one reservation per person.');
+  end if;
+  if v_ip is not null then
+    if (select count(*) from public.reservation_log where sale_id = v_sale.id and client_ip = v_ip) >= 3 then
+      return jsonb_build_object('success', false, 'error', 'Too many reservations from this device for this sale.');
+    end if;
+    if (select count(*) from public.reservation_log
+        where client_ip = v_ip and created_at > now() - interval '1 hour') >= 10 then
+      return jsonb_build_object('success', false, 'error', 'Too many reservations from this device — try again later.');
+    end if;
   end if;
 
   update public.items
   set status = 'reserved',
-      reserved_name = trim(p_name),
-      reserved_phone = trim(p_phone),
       reserved_at = now()
   where id = p_item_id;
 
-  update public.sales
-  set reserved_history = array_append(v_sale.reserved_history, v_norm_phone)
-  where id = v_sale.id;
+  insert into public.item_holds (item_id, sale_id, name, phone)
+  values (p_item_id, v_sale.id, left(trim(p_name), 60), v_norm_phone)
+  on conflict (item_id) do update
+    set name = excluded.name, phone = excluded.phone, created_at = now();
+
+  insert into public.reservation_log (sale_id, phone, client_ip)
+  values (v_sale.id, v_norm_phone, v_ip);
 
   return jsonb_build_object('success', true, 'reservation_minutes', v_minutes);
 end;

@@ -23,6 +23,37 @@ export function siteOrigin(fallback = ""): string {
   return raw.replace(/\/+$/, "");
 }
 
+/** Item columns for the seller's admin view. item_holds (buyer name/phone) is
+ * private to the sale owner, so it's only embedded here, never on the public
+ * shop page. */
+export const ITEM_SELECT = "*, item_photos(*), item_holds(*)";
+
+export const PASSWORD_SPECIALS = "~!@#$%^&*?=+";
+
+/** Password requirements, in the order they're shown to the user. */
+export const PASSWORD_RULES: { label: string; test: (pw: string) => boolean }[] = [
+  { label: "8–20 characters", test: (pw) => pw.length >= 8 && pw.length <= 20 },
+  { label: "An uppercase letter (A–Z)", test: (pw) => /[A-Z]/.test(pw) },
+  { label: "A lowercase letter (a–z)", test: (pw) => /[a-z]/.test(pw) },
+  { label: "A number (0–9)", test: (pw) => /[0-9]/.test(pw) },
+  {
+    label: `A special character: ${PASSWORD_SPECIALS.split("").join(" ")}`,
+    test: (pw) => PASSWORD_SPECIALS.split("").some((c) => pw.includes(c)),
+  },
+];
+
+/** Returns an error message for the first unmet password rule, or "" if the password is valid. */
+export function passwordError(pw: string): string {
+  const failed = PASSWORD_RULES.find((r) => !r.test(pw));
+  return failed ? `Password needs: ${failed.label.charAt(0).toLowerCase()}${failed.label.slice(1)}.` : "";
+}
+
+/** Formats a stored 10-digit phone number as "(555) 555-1234"; anything else is returned as-is. */
+export function formatPhone(digits: string): string {
+  const m = /^(\d{3})(\d{3})(\d{4})$/.exec(digits);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : digits;
+}
+
 export function slugify(input: string): string {
   return input
     .toLowerCase()

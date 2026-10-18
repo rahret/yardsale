@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AccountBilling, PaymentOptions, Profile } from "@/lib/types";
-import { siteOrigin } from "@/lib/utils";
+import { passwordError, siteOrigin } from "@/lib/utils";
+import PasswordRules from "@/components/PasswordRules";
 
 const PHOTO_BUCKET = "item-photos";
 
@@ -137,7 +138,8 @@ function SecuritySection({
   }
 
   async function changePassword() {
-    if (password.length < 6) return setPwStatus({ error: "Password must be at least 6 characters." });
+    const pwError = passwordError(password);
+    if (pwError) return setPwStatus({ error: pwError });
     if (password !== confirm) return setPwStatus({ error: "Passwords don't match." });
     setPwStatus({ busy: true });
     const supabase = createClient();
@@ -176,9 +178,10 @@ function SecuritySection({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className={INPUT}
-          placeholder="At least 6 characters"
+          maxLength={20}
           autoComplete="new-password"
         />
+        <PasswordRules password={password} />
       </Field>
       <Field label="Confirm new password">
         <input

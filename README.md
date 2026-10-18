@@ -49,6 +49,42 @@ src/components/ShopView.tsx  Public shop UI logic (browse, filter, reserve, coun
 src/components/PhotoUploader.tsx  Drag-and-drop multi-photo upload to Supabase Storage.
 ```
 
+## Checks & tests
+
+```
+npm run lint        # ESLint (next/core-web-vitals)
+npm run typecheck   # TypeScript
+npm test            # unit tests (Vitest)
+npm run test:db     # loads supabase/schema.sql into a scratch Postgres and runs
+                    # supabase/tests/*.test.sql (needs psql + PGHOST/PGUSER/... set)
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs all of these, plus `npm run build`, on
+every pull request and on pushes to `main`.
+
+## Buyer privacy & reservation limits
+
+- Buyers' names and phone numbers are stored in `item_holds`, which only the sale's owner
+  can read (the seller sees them next to each reserved item). They are never on the
+  publicly readable `items` / `sales` rows.
+- `reserve_item` requires a real-looking 10-digit US/Canada phone number, allows one
+  reservation per phone number per sale, and limits each device (client IP) to 3
+  reservations per sale and 10 per hour across all sales.
+
+## Password rules
+
+New passwords (sign-up, reset, and the Account page) must be 8–20 characters with at least
+one uppercase letter, one lowercase letter, one number, and one of `~ ! @ # $ % ^ & * ? = +`.
+The rules live in `PASSWORD_RULES` in `src/lib/utils.ts`. They're checked in the app; to
+also enforce them in Supabase itself, set Authentication → Providers → Email → minimum
+password length to 8 and require lowercase, uppercase, digits and symbols.
+
+## Password reset
+
+"Forgot password?" on the login page emails a link to `/auth/callback?redirectTo=/reset-password`.
+In Supabase → Authentication → URL Configuration, make sure your site's
+`/auth/callback**` URL is in the Redirect URLs allow-list.
+
 ## Notes / things to customize
 
 - **SMS reminders** aren't included — buyers just give a phone number shown to the
