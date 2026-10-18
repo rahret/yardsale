@@ -71,6 +71,14 @@ every pull request and on pushes to `main`.
   reservation per phone number per sale, and limits each device (client IP) to 3
   reservations per sale and 10 per hour across all sales.
 
+## Password rules
+
+New passwords (sign-up, reset, and the Account page) must be 8–20 characters with at least
+one uppercase letter, one lowercase letter, one number, and one of `~ ! @ # $ ^ * ? = +`.
+The rules live in `PASSWORD_RULES` in `src/lib/utils.ts`. They're checked in the app; to
+also enforce them in Supabase itself, set Authentication → Providers → Email → minimum
+password length to 8 and require lowercase, uppercase, digits and symbols.
+
 ## Password reset
 
 "Forgot password?" on the login page emails a link to `/auth/callback?redirectTo=/reset-password`.

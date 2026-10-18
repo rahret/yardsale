@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { passwordError } from "@/lib/utils";
+import PasswordRules from "@/components/PasswordRules";
 
 // Reached from the password-reset email: /auth/callback exchanges the link's
 // one-time code for a session, then redirects here to choose a new password.
@@ -24,8 +26,9 @@ export default function ResetPasswordPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    const pwError = passwordError(password);
+    if (pwError) {
+      setError(pwError);
       return;
     }
     if (password !== confirm) {
@@ -71,9 +74,10 @@ export default function ResetPasswordPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-3 py-2.5 border-2 border-cardboard-dark rounded-lg"
-                  placeholder="At least 6 characters"
+                  maxLength={20}
                   autoComplete="new-password"
                 />
+                <PasswordRules password={password} />
               </div>
               <div>
                 <label className="block text-xs font-bold opacity-70 mb-1">Confirm new password</label>

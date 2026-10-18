@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { siteOrigin } from "@/lib/utils";
+import { passwordError, siteOrigin } from "@/lib/utils";
+import PasswordRules from "@/components/PasswordRules";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -16,8 +17,9 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+    const pwError = passwordError(password);
+    if (pwError) {
+      setError(pwError);
       return;
     }
     setLoading(true);
@@ -93,8 +95,10 @@ export default function SignupPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2.5 border-2 border-cardboard-dark rounded-lg"
-              placeholder="At least 6 characters"
+              maxLength={20}
+              autoComplete="new-password"
             />
+            <PasswordRules password={password} />
           </div>
           {error && <div className="text-marker text-sm font-semibold">{error}</div>}
           <button

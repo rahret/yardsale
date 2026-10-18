@@ -6,6 +6,8 @@ import {
   formatSignTime,
   isEffectivelyExpired,
   money,
+  passwordError,
+  PASSWORD_SPECIALS,
   reservationDeadline,
   siteOrigin,
   slugify,
@@ -73,5 +75,29 @@ describe("reservation expiry", () => {
 
   it("never treats a non-reserved item as expired", () => {
     expect(isEffectivelyExpired({ status: "available", reserved_at: null } as Item, sale)).toBe(false);
+  });
+});
+
+describe("passwordError", () => {
+  it("accepts a password meeting every rule", () => {
+    expect(passwordError("Garage$ale1")).toBe("");
+    expect(passwordError("Aa1~aaaa")).toBe(""); // exactly 8
+    expect(passwordError("Aa1+" + "a".repeat(16))).toBe(""); // exactly 20
+  });
+
+  it.each([
+    ["Aa1~aaa", "8–20 characters"], // 7 chars
+    ["Aa1~" + "a".repeat(17), "8–20 characters"], // 21 chars
+    ["garage$ale1", "uppercase"],
+    ["GARAGE$ALE1", "lowercase"],
+    ["Garage$ale", "number"],
+    ["GarageSale1", "special character"],
+    ["Garage%ale1", "special character"], // % isn't one of the required specials
+  ])("rejects %s (needs %s)", (pw, need) => {
+    expect(passwordError(pw)).toContain(need);
+  });
+
+  it("accepts each listed special character", () => {
+    for (const c of PASSWORD_SPECIALS) expect(passwordError(`Garage${c}le1`)).toBe("");
   });
 });
