@@ -40,6 +40,8 @@ src/lib/supabase/server.ts   Server Supabase client (server components / route h
 middleware.ts                Keeps auth session fresh, protects /dashboard routes.
 src/app/login, /signup       Auth pages.
 src/app/dashboard            Signed-in area: list of a user's sales, create new sale.
+src/app/dashboard/account    Account page: profile, email/password, plan & billing,
+                              how buyers can pay you, delete account.
 src/app/dashboard/sales/[id] Sale admin: items, photos, settings, share/QR, stats.
 src/app/s/[slug]             Public shop page buyers see (no login required).
 src/components/SaleAdmin.tsx Admin UI logic (items CRUD, photo management, settings).
@@ -52,7 +54,10 @@ src/components/PhotoUploader.tsx  Drag-and-drop multi-photo upload to Supabase S
 - **SMS reminders** aren't included — buyers just give a phone number shown to the
   seller in the admin panel. Wiring up Twilio to text buyers when their hold is about to
   expire would be a natural next step.
-- **Payments** aren't included — the app assumes cash/Venmo/etc. at pickup, same as the
-  original design.
+- **Payments** aren't processed yet — sellers list how buyers can pay them (cash, Venmo,
+  Cash App, PayPal, Zelle) on the Account page. The `account_billing` table is in place
+  for Stripe subscriptions (seller plans) and Stripe Connect (card / Apple Pay payouts
+  to sellers); it is read-only to users and meant to be written by Stripe webhooks
+  using the service-role key.
 - The visual style (cardboard tags, marker font) lives in `tailwind.config.ts` and
   `globals.css` — change the color variables there to reskin it.

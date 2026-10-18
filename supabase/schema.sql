@@ -45,6 +45,61 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
+-- extra profile fields edited on the Account page
+alter table public.profiles add column if not exists phone text not null default '';
+-- how buyers can pay this seller today (before card payments are set up), e.g.
+-- {"cash": true, "venmo": "@jamie", "cashapp": "$jamie", "paypal": "", "zelle": ""}
+alter table public.profiles add column if not exists payment_options jsonb not null default '{"cash": true}';
+
+-- ----------------------------------------------------------------------------
+-- account_billing: subscription plan + Stripe ids, one row per user.
+-- Kept out of `profiles` on purpose: users may update their own profile, but
+-- must never be able to change their own plan or Stripe ids. Users can only
+-- READ their row; it is written server-side (service role) by Stripe
+-- webhooks. A missing row means the free plan.
+-- ----------------------------------------------------------------------------
+create table if not exists public.account_billing (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  plan text not null default 'free' check (plan in ('free', 'pro')),
+  -- mirrors Stripe's subscription.status: active, trialing, past_due, canceled, ...
+  subscription_status text,
+  current_period_end timestamptz,
+  cancel_at_period_end boolean not null default false,
+  stripe_customer_id text unique,
+  stripe_subscription_id text unique,
+  -- Stripe Connect (Express) account used to pay out sellers for card sales
+  stripe_connect_account_id text unique,
+  connect_charges_enabled boolean not null default false,
+  connect_payouts_enabled boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.account_billing enable row level security;
+
+drop policy if exists "Users can view their own billing" on public.account_billing;
+create policy "Users can view their own billing"
+  on public.account_billing for select
+  using (auth.uid() = user_id);
+
+-- lets a signed-in user permanently delete their own account. Deleting the
+-- auth user cascades to profiles, sales, items, sale_days, saved_locations,
+-- and account_billing. (Photo files in Storage are removed by the app first.)
+create or replace function public.delete_my_account()
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Not signed in';
+  end if;
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;
+
 -- ----------------------------------------------------------------------------
 -- sales: one garage sale, owned by a user. a user can own many sales.
 -- ----------------------------------------------------------------------------
@@ -372,6 +427,7 @@ create policy "Owners can delete photos for their own items"
 grant usage on schema public to anon, authenticated;
 
 grant select, update on public.profiles to anon, authenticated;
+grant select on public.account_billing to authenticated;
 grant select, insert, update, delete on public.sales to anon, authenticated;
 grant select, insert, update, delete on public.sale_days to anon, authenticated;
 grant select, insert, update, delete on public.items to anon, authenticated;

@@ -67,3 +67,35 @@ export interface Item {
   updated_at: string;
   item_photos?: ItemPhoto[];
 }
+
+export interface PaymentOptions {
+  cash?: boolean;
+  venmo?: string;
+  cashapp?: string;
+  paypal?: string;
+  zelle?: string;
+}
+
+export interface Profile {
+  id: string;
+  display_name: string | null;
+  phone: string;
+  payment_options: PaymentOptions;
+  created_at: string;
+}
+
+export type Plan = "free" | "pro";
+
+export interface AccountBilling {
+  user_id: string;
+  plan: Plan;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_connect_account_id: string | null;
+  connect_charges_enabled: boolean;
+  connect_payouts_enabled: boolean;
+  updated_at: string;
+}

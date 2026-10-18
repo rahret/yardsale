@@ -21,14 +21,22 @@ export default async function DashboardLayout({
         <a href="/dashboard" className="font-marker text-2xl text-marker -rotate-1 inline-block">
           Yard Sale QR
         </a>
-        <form action="/auth/signout" method="post">
-          <button
-            type="submit"
-            className="text-sm font-semibold border-2 border-cardboard-dark rounded-full px-4 py-1.5"
+        <div className="flex items-center gap-2">
+          <a
+            href="/dashboard/account"
+            className="text-sm font-semibold border-2 border-cardboard-dark rounded-full px-4 py-1.5 bg-chalk"
           >
-            Log out
-          </button>
-        </form>
+            Account
+          </a>
+          <form action="/auth/signout" method="post">
+            <button
+              type="submit"
+              className="text-sm font-semibold border-2 border-cardboard-dark rounded-full px-4 py-1.5"
+            >
+              Log out
+            </button>
+          </form>
+        </div>
       </div>
       <div className="max-w-3xl mx-auto">{children}</div>
     </div>
