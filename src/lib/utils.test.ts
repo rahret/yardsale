@@ -92,7 +92,7 @@ describe("passwordError", () => {
     ["GARAGE$ALE1", "lowercase"],
     ["Garage$ale", "number"],
     ["GarageSale1", "special character"],
-    ["Garage%ale1", "special character"], // % isn't one of the required specials
+    ["Garage.ale1", "special character"], // . isn't one of the required specials
   ])("rejects %s (needs %s)", (pw, need) => {
     expect(passwordError(pw)).toContain(need);
   });

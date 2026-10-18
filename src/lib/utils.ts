@@ -28,7 +28,7 @@ export function siteOrigin(fallback = ""): string {
  * shop page. */
 export const ITEM_SELECT = "*, item_photos(*), item_holds(*)";
 
-export const PASSWORD_SPECIALS = "~!@#$^*?=+";
+export const PASSWORD_SPECIALS = "~!@#$%^&*?=+";
 
 /** Password requirements, in the order they're shown to the user. */
 export const PASSWORD_RULES: { label: string; test: (pw: string) => boolean }[] = [

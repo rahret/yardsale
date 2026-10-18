@@ -74,7 +74,7 @@ every pull request and on pushes to `main`.
 ## Password rules
 
 New passwords (sign-up, reset, and the Account page) must be 8–20 characters with at least
-one uppercase letter, one lowercase letter, one number, and one of `~ ! @ # $ ^ * ? = +`.
+one uppercase letter, one lowercase letter, one number, and one of `~ ! @ # $ % ^ & * ? = +`.
 The rules live in `PASSWORD_RULES` in `src/lib/utils.ts`. They're checked in the app; to
 also enforce them in Supabase itself, set Authentication → Providers → Email → minimum
 password length to 8 and require lowercase, uppercase, digits and symbols.
