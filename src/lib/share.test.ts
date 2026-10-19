@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Item, Sale, SaleDay } from "./types";
 import {
+  currentDays,
   dayLines,
   itemPreview,
   publicLocation,
@@ -113,5 +114,27 @@ describe("salePost", () => {
       expect(text).not.toContain("123 Maple");
       expect(text).toContain("https://x.com/s/abc?src=group");
     }
+  });
+});
+
+describe("currentDays", () => {
+  const past = [
+    { date: "2026-08-08", start_time: "09:00:00", end_time: "14:00:00" },
+    { date: "2026-08-09", start_time: "10:00:00", end_time: "17:00:00" },
+    { date: "2026-10-18", start_time: "10:00:00", end_time: "23:00:00" },
+  ] as SaleDay[];
+  // Oct 18, 8pm in Chicago (CDT) = Oct 19 01:00 UTC
+  const sunEvening = new Date("2026-10-19T01:00:00Z");
+
+  it("drops days that are already over, so previews lead with today", () => {
+    expect(currentDays(sale, past, sunEvening).map((d) => d.date)).toEqual(["2026-10-18"]);
+    const p = salePreview(sale, past, items, sunEvening);
+    expect(p.title).toBe("Happening now! Jamie's Yard Sale · Sun, Oct 18, 10A–11P");
+    expect(salePost("text", sale, past, items, "L", sunEvening)).toContain("Sun, Oct 18");
+    expect(salePost("text", sale, past, items, "L", sunEvening)).not.toContain("Aug");
+  });
+  it("keeps everything without a time zone, or once the whole sale is over", () => {
+    expect(currentDays({ timezone: null }, past, sunEvening)).toHaveLength(3);
+    expect(currentDays(sale, past, new Date("2026-11-01T00:00:00Z"))).toHaveLength(3);
   });
 });

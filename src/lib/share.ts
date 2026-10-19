@@ -126,6 +126,23 @@ export function salePhase(
   return stillAhead ? "upcoming" : "ended";
 }
 
+/** Days that haven't finished yet, in the sale's time zone — so previews and
+ * posts lead with today or the next day, not one that's already over. Without
+ * a time zone we can't tell, so every day is kept. If every day is over, the
+ * full list is returned (the sale reads as ended anyway). */
+export function currentDays<D extends Pick<SaleDay, "date" | "start_time" | "end_time">>(
+  sale: Pick<Sale, "timezone">,
+  days: D[],
+  now: Date = new Date()
+): D[] {
+  const local = sale.timezone ? localNow(sale.timezone, now) : null;
+  if (!local) return days;
+  const left = days.filter(
+    (d) => d.date > local.date || (d.date === local.date && local.time < d.end_time.slice(0, 5))
+  );
+  return left.length > 0 ? left : days;
+}
+
 export interface SalePreview {
   title: string;
   description: string;
@@ -134,7 +151,7 @@ export interface SalePreview {
 /** Title/description for a sale's link preview (Open Graph / Twitter card). */
 export function salePreview(sale: Sale, days: SaleDay[], items: Item[], now: Date = new Date()): SalePreview {
   const phase = salePhase(sale, days, now);
-  const lines = dayLines(days);
+  const lines = dayLines(currentDays(sale, days, now));
   const when =
     phase === "ended" ? "This sale has ended" : lines.length > 0 ? lines[0] + (lines.length > 1 ? ` (+${lines.length - 1} more day${lines.length > 2 ? "s" : ""})` : "") : "";
   const title = [phase === "now" ? `Happening now! ${sale.name}` : sale.name, when].filter(Boolean).join(" · ");
@@ -153,8 +170,8 @@ export function salePreview(sale: Sale, days: SaleDay[], items: Item[], now: Dat
 }
 
 /** Title/description for a single item's link preview. */
-export function itemPreview(sale: Sale, days: SaleDay[], item: Item): SalePreview {
-  const lines = dayLines(days);
+export function itemPreview(sale: Sale, days: SaleDay[], item: Item, now: Date = new Date()): SalePreview {
+  const lines = dayLines(currentDays(sale, days, now));
   const status = item.status === "sold" ? "Sold" : money(item.price);
   return {
     title: `${item.name} · ${status}`,
@@ -176,9 +193,10 @@ export function salePost(
   sale: Sale,
   days: SaleDay[],
   items: Item[],
-  link: string
+  link: string,
+  now: Date = new Date()
 ): string {
-  const lines = dayLines(days);
+  const lines = dayLines(currentDays(sale, days, now));
   const where = publicLocation(sale);
   const cats = topCategories(items, 5);
   const count = forSaleItems(items).length;
