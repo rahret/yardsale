@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
-import { dayLines, forSaleItems, publicLocation, publicPhotoUrl, salePhase, topCategories } from "@/lib/share";
+import sharp from "sharp";
+import { currentDays, dayLines, forSaleItems, publicLocation, publicPhotoUrl, salePhase, topCategories } from "@/lib/share";
 import type { Item } from "@/lib/types";
 import type { PublicSale } from "@/lib/saleData";
 import { money } from "@/lib/utils";
@@ -40,6 +41,26 @@ function firstPhoto(item: Item): string | null {
   return p ? publicPhotoUrl(p.storage_path) : null;
 }
 
+/** Downloads a photo and returns it upright and shrunk, as a data URL.
+ * Phone cameras save pixels sideways plus an EXIF "rotate me" flag; browsers
+ * honor the flag but the preview renderer doesn't, so photos came out turned
+ * 90°. sharp's rotate() (no angle) applies the flag. Falls back to the
+ * original URL if anything goes wrong. */
+async function uprightPhoto(url: string, maxSide: number): Promise<string> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return url;
+    const jpeg = await sharp(Buffer.from(await res.arrayBuffer()))
+      .rotate()
+      .resize({ width: maxSide, height: maxSide, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+    return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+  } catch {
+    return url;
+  }
+}
+
 export async function renderPreviewImage(
   { sale, items, days }: PublicSale,
   { square = false, item }: { square?: boolean; item?: Item } = {}
@@ -48,7 +69,7 @@ export async function renderPreviewImage(
   const height = square ? 1080 : 630;
 
   const phase = salePhase(sale, days);
-  const lines = dayLines(days).slice(0, 3);
+  const lines = dayLines(currentDays(sale, days)).slice(0, 3);
   const location = publicLocation(sale);
   const cats = topCategories(items, square ? 4 : 3);
   const count = forSaleItems(items).length;
@@ -62,6 +83,7 @@ export async function renderPreviewImage(
         .slice(0, 4);
   // the grid is 1, 2 (side by side) or 4 (2×2) — drop a 3rd photo rather than leave a gap
   if (photos.length === 3) photos.pop();
+  const uprightPhotos = await Promise.all(photos.map((url) => uprightPhoto(url, photos.length === 1 ? 1000 : 600)));
 
   const headline = item ? item.name : sale.name;
   const badge =
@@ -94,7 +116,7 @@ export async function renderPreviewImage(
           background: CARDBOARD,
         }}
       >
-        {photos.map((src, i) => {
+        {uprightPhotos.map((src, i) => {
           // 1 photo: full panel; 2: side by side; 4: 2×2 grid
           const cols = photos.length === 1 ? 1 : 2;
           const rows = photos.length <= 2 ? 1 : 2;
