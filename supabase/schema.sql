@@ -127,6 +127,13 @@ alter table public.sales add column if not exists street text not null default '
 alter table public.sales add column if not exists city text not null default '';
 alter table public.sales add column if not exists state text not null default '';
 alter table public.sales add column if not exists zip text not null default '';
+
+-- link previews / share posts show only the street name (no house number)
+-- unless the seller opts in to the full address
+alter table public.sales add column if not exists show_full_address boolean not null default false;
+-- seller's IANA time zone (e.g. 'America/Chicago'), captured from their
+-- browser when they save the sale, so "happening now" can be computed
+alter table public.sales add column if not exists timezone text;
 alter table public.sales drop column if exists address;
 
 -- starts_at/ends_at (a single date range) were replaced by the sale_days
@@ -502,6 +509,65 @@ create trigger items_clear_hold
   for each row execute procedure public.clear_item_hold();
 
 -- ----------------------------------------------------------------------------
+-- sale_visits: one row per buyer visit to a sale page (logged once per browser
+-- session), tagged with where the link came from (?src=qr, facebook, ...).
+-- Written only by log_sale_visit(); readable only by the sale's owner. No
+-- personal data is stored.
+-- ----------------------------------------------------------------------------
+create table if not exists public.sale_visits (
+  id bigint generated always as identity primary key,
+  sale_id uuid not null references public.sales (id) on delete cascade,
+  item_id uuid references public.items (id) on delete set null,
+  src text not null default 'direct',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists sale_visits_sale_id_idx on public.sale_visits (sale_id, created_at);
+
+alter table public.sale_visits enable row level security;
+
+drop policy if exists "Owners can view visits to their own sales" on public.sale_visits;
+create policy "Owners can view visits to their own sales"
+  on public.sale_visits for select
+  using (exists (select 1 from public.sales s where s.id = sale_visits.sale_id and s.owner_id = auth.uid()));
+
+create or replace function public.log_sale_visit(p_sale_id uuid, p_src text, p_item_id uuid default null)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_src text := lower(coalesce(p_src, ''));
+begin
+  if v_src not in ('qr', 'share', 'facebook', 'group', 'craigslist', 'text', 'email', 'friend') then
+    v_src := 'direct';
+  end if;
+  insert into public.sale_visits (sale_id, item_id, src)
+  select s.id, i.id, v_src
+  from public.sales s
+  left join public.items i on i.id = p_item_id and i.sale_id = s.id
+  where s.id = p_sale_id
+    and s.status <> 'draft'
+    -- don't count the seller looking at their own sale
+    and s.owner_id is distinct from auth.uid();
+end;
+$$;
+
+grant execute on function public.log_sale_visit(uuid, text, uuid) to anon, authenticated;
+
+-- visit totals per source for the seller's dashboard
+create or replace function public.sale_visit_counts(p_sale_id uuid)
+returns table (src text, visits bigint)
+language sql
+stable
+security invoker set search_path = public
+as $$
+  select v.src, count(*) from public.sale_visits v where v.sale_id = p_sale_id group by v.src;
+$$;
+
+grant execute on function public.sale_visit_counts(uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
 -- GRANTS: Row Level Security only restricts which *rows* a role can touch —
 -- the role still needs baseline table-level privileges before RLS is even
 -- evaluated. Some Supabase projects don't pre-grant these to anon/authenticated
@@ -514,6 +580,7 @@ grant usage on schema public to anon, authenticated;
 grant select, update on public.profiles to anon, authenticated;
 grant select on public.account_billing to authenticated;
 grant select, delete on public.item_holds to authenticated;
+grant select on public.sale_visits to authenticated;
 grant select, insert, update, delete on public.sales to anon, authenticated;
 grant select, insert, update, delete on public.sale_days to anon, authenticated;
 grant select, insert, update, delete on public.items to anon, authenticated;

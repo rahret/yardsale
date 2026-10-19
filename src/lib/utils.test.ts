@@ -60,6 +60,11 @@ describe("siteOrigin", () => {
   it("strips trailing slashes", () => {
     expect(siteOrigin("https://example.com//")).toBe("https://example.com");
   });
+  it("adds a missing scheme", () => {
+    expect(siteOrigin("example.com")).toBe("https://example.com");
+    expect(siteOrigin("localhost:3000/")).toBe("http://localhost:3000");
+    expect(siteOrigin("http://example.com")).toBe("http://example.com");
+  });
 });
 
 describe("reservation expiry", () => {

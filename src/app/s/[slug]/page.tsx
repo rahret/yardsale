@@ -1,14 +1,50 @@
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import ShopView from "@/components/ShopView";
+import { loadPublicSale, previewVersion, requestOrigin } from "@/lib/saleData";
+import { itemPreview, salePreview } from "@/lib/share";
 
 export const dynamic = "force-dynamic";
 
-export default async function PublicSalePage({ params }: { params: { slug: string } }) {
-  const supabase = createClient();
+type Props = { params: { slug: string }; searchParams: { item?: string } };
 
-  const { data: sale } = await supabase.from("sales").select("*").eq("slug", params.slug).single();
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+  const data = await loadPublicSale(params.slug);
+  if (!data || data.sale.status === "draft") {
+    return { title: "Yard Sale QR", robots: { index: false } };
+  }
 
-  if (!sale) {
+  const origin = requestOrigin();
+  const item = searchParams.item ? data.items.find((i) => i.id === searchParams.item) : undefined;
+  const { title, description } = item
+    ? itemPreview(data.sale, data.days, item)
+    : salePreview(data.sale, data.days, data.items);
+
+  const image = new URL(`${origin}/s/${params.slug}/preview`);
+  image.searchParams.set("v", previewVersion(data));
+  if (item) image.searchParams.set("item", item.id);
+  const url = item ? `${origin}/s/${params.slug}?item=${item.id}` : `${origin}/s/${params.slug}`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: "website",
+      siteName: "Yard Sale QR",
+      title,
+      description,
+      url,
+      images: [{ url: image.toString(), width: 1200, height: 630, alt: title }],
+    },
+    twitter: { card: "summary_large_image", title, description, images: [image.toString()] },
+  };
+}
+
+export default async function PublicSalePage({ params, searchParams }: Props) {
+  const found = await loadPublicSale(params.slug);
+
+  if (!found) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4 text-center">
         <div>
@@ -19,20 +55,22 @@ export default async function PublicSalePage({ params }: { params: { slug: strin
     );
   }
 
-  // sweep any stale reservations before rendering so the page is accurate on first load
-  await supabase.rpc("sweep_expired_reservations", { p_sale_id: sale.id });
-
+  // sweep any stale reservations so the page is accurate on first load; the
+  // cached items above may predate the sweep, so refetch if anything expired
+  const supabase = createClient();
+  await supabase.rpc("sweep_expired_reservations", { p_sale_id: found.sale.id });
   const { data: items } = await supabase
     .from("items")
     .select("*, item_photos(*)")
-    .eq("sale_id", sale.id)
+    .eq("sale_id", found.sale.id)
     .order("created_at", { ascending: false });
 
-  const { data: saleDays } = await supabase
-    .from("sale_days")
-    .select("*")
-    .eq("sale_id", sale.id)
-    .order("date", { ascending: true });
-
-  return <ShopView sale={sale} initialItems={items || []} saleDays={saleDays || []} />;
+  return (
+    <ShopView
+      sale={found.sale}
+      initialItems={items || found.items}
+      saleDays={found.days}
+      initialItemId={searchParams.item}
+    />
+  );
 }
