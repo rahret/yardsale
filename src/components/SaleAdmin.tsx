@@ -8,6 +8,7 @@ import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types
 import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import FitText from "@/components/FitText";
+import ShareSaleCard from "@/components/ShareSaleCard";
 
 const MAX_SALE_DAYS = 7;
 
@@ -88,6 +89,8 @@ export default function SaleAdmin({
 
   const siteUrl = siteOrigin(typeof window !== "undefined" ? window.location.origin : "");
   const shareUrl = `${siteUrl}/s/${sale.slug}`;
+  // printed QR codes / signs are tagged so visits from them can be counted
+  const qrUrl = `${shareUrl}?src=qr`;
 
   const sortedDayRows = useMemo(
     () => [...dayRows].filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date)),
@@ -186,6 +189,7 @@ export default function SaleAdmin({
       state: saleForm.state.trim(),
       zip: saleForm.zip.trim(),
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
+      timezone: browserTimeZone() ?? sale.timezone,
     };
     const { data, error } = await supabase.from("sales").update(patch).eq("id", sale.id).select().single();
     if (error) setSaveError(error.message);
@@ -254,7 +258,12 @@ export default function SaleAdmin({
 
   async function setSaleStatus(status: SaleStatus) {
     const supabase = createClient();
-    const { data, error } = await supabase.from("sales").update({ status }).eq("id", sale.id).select().single();
+    const { data, error } = await supabase
+      .from("sales")
+      .update({ status, timezone: browserTimeZone() ?? sale.timezone })
+      .eq("id", sale.id)
+      .select()
+      .single();
     if (!error && data) setSale(data);
   }
 
@@ -458,7 +467,7 @@ export default function SaleAdmin({
             className="bg-white p-2 rounded-lg border-2 border-cardboard-dark cursor-pointer"
             title="Click to print this QR code"
           >
-            <QRCodeCanvas value={shareUrl} size={120} fgColor="#33312E" />
+            <QRCodeCanvas value={qrUrl} size={120} fgColor="#33312E" />
           </button>
           <div className="text-xs opacity-70 flex-1 min-w-[160px]">
             Click the QR code, or use the buttons below, to print it for your signs. It always points to the link
@@ -481,6 +490,7 @@ export default function SaleAdmin({
             🪧 Create sign
           </button>
         </div>
+        <ShareSaleCard sale={sale} items={items} days={sortedDayRows} onSaleChange={setSale} />
       </Card>
 
       {/* sale settings */}
@@ -968,7 +978,7 @@ export default function SaleAdmin({
                 itself (vw/vh), not a fixed inch value, so it always fills most
                 of the sheet on Letter, A4, A5, labels, etc. */}
             <QRCodeSVG
-              value={shareUrl}
+              value={qrUrl}
               fgColor="#000000"
               style={{ width: "min(90vw, 90vh)", height: "min(90vw, 90vh)" }}
             />
@@ -986,7 +996,7 @@ export default function SaleAdmin({
             <FitText lines={["YARD SALE"]} fontWeight={800} />
             <div className="flex flex-1 w-full items-center gap-[4%] min-h-0">
               <div className="w-[48%] h-full flex items-center justify-center min-h-0">
-                <QRCodeSVG value={shareUrl} fgColor="#000000" style={{ width: "100%", height: "100%" }} />
+                <QRCodeSVG value={qrUrl} fgColor="#000000" style={{ width: "100%", height: "100%" }} />
               </div>
               <div className="w-[48%] flex flex-col items-center justify-center gap-[3vw]">
                 {sale.street && <FitText lines={[sale.street]} />}
@@ -1002,6 +1012,15 @@ export default function SaleAdmin({
         )}
     </div>
   );
+}
+
+/** The seller's IANA time zone, used to tell buyers when a sale is "happening now". */
+function browserTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
 }
 
 function Stat({ num, label }: { num: number | string; label: string }) {

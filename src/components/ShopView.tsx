@@ -15,6 +15,8 @@ import {
   sortSaleDays,
 } from "@/lib/utils";
 import { photoUrl } from "@/components/PhotoUploader";
+import ShareButton from "@/components/ShareButton";
+import { saleLink, siteOriginForClient } from "@/lib/share";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
 
@@ -22,16 +24,21 @@ export default function ShopView({
   sale,
   initialItems,
   saleDays,
+  initialItemId,
 }: {
   sale: Sale;
   initialItems: Item[];
   saleDays: SaleDay[];
+  /** Opens this item's detail sheet on load (from a shared item link). */
+  initialItemId?: string;
 }) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [filterCats, setFilterCats] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>("newest");
   const [showSold, setShowSold] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialItemId && initialItems.some((i) => i.id === initialItemId) ? initialItemId : null
+  );
   const [, forceTick] = useState(0);
 
   const supabase = useMemo(() => createClient(), []);
@@ -54,6 +61,21 @@ export default function ShopView({
       clearInterval(poll);
     };
   }, [sale.id, supabase]);
+
+  // Count this visit (once per browser session) and where it came from, so
+  // the seller can see which signs/posts bring people in.
+  useEffect(() => {
+    if (sale.status === "draft") return;
+    const key = `visit:${sale.id}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+    } catch {}
+    const params = new URLSearchParams(window.location.search);
+    supabase
+      .rpc("log_sale_visit", { p_sale_id: sale.id, p_src: params.get("src") || "", p_item_id: params.get("item") || null })
+      .then(() => {});
+  }, [sale.id, sale.status, supabase]);
 
   // 1s tick so countdowns move without a full refetch
   useEffect(() => {
@@ -92,6 +114,15 @@ export default function ShopView({
     <div className="max-w-3xl mx-auto pb-10">
       <div className="px-5 pt-6 pb-4 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
+          <div className="float-right ml-3">
+            <ShareButton
+              url={saleLink(siteOriginForClient(), sale.slug, { src: "friend" })}
+              title={sale.name}
+              text={`Check out this yard sale: ${sale.name}`}
+              label="↗ Share"
+              className="border-2 border-cardboard-dark bg-white rounded-full px-3 py-1.5 text-xs font-bold"
+            />
+          </div>
           <div className="font-marker text-3xl text-marker -rotate-1 break-words">{sale.name}</div>
           <div className="text-sm opacity-65 mt-1.5 break-words">{sale.tagline}</div>
           {sale.street && (
@@ -463,6 +494,15 @@ function DetailSheet({
           <div className="text-xs font-bold opacity-60 text-center mb-1">×{item.quantity_total} available</div>
         )}
         <div className="font-marker text-4xl text-marker text-center mb-2.5">{money(item.price)}</div>
+        <div className="flex justify-center mb-2.5">
+          <ShareButton
+            url={saleLink(siteOriginForClient(), sale.slug, { item: item.id, src: "friend" })}
+            title={`${item.name} · ${money(item.price)}`}
+            text={`Saw this at ${sale.name}: ${item.name} for ${money(item.price)}`}
+            label="↗ Share this item"
+            className="text-xs font-bold text-grass-dark underline underline-offset-2"
+          />
+        </div>
         {item.description && <p className="text-sm opacity-85 text-center leading-relaxed">{item.description}</p>}
 
         {item.status === "sold" ? (

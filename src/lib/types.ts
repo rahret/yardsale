@@ -16,6 +16,10 @@ export interface Sale extends Address {
   tagline: string;
   default_reservation_minutes: number;
   status: SaleStatus;
+  /** Previews/posts show the full street address instead of just the street name. */
+  show_full_address: boolean;
+  /** Seller's IANA time zone, e.g. "America/Chicago"; null until they save the sale. */
+  timezone: string | null;
   created_at: string;
   updated_at: string;
 }

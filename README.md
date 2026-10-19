@@ -49,6 +49,24 @@ src/components/ShopView.tsx  Public shop UI logic (browse, filter, reserve, coun
 src/components/PhotoUploader.tsx  Drag-and-drop multi-photo upload to Supabase Storage.
 ```
 
+## Sharing & link previews
+
+- **Link previews:** `/s/[slug]` sets Open Graph / Twitter tags (title with dates, top
+  categories, item count, location). The image is drawn per sale at `/s/[slug]/preview`
+  (`?item=<id>` for one item, `?size=square` for a 1080×1080 story image). Draft sales get
+  no preview. "Happening now" uses the seller's time zone, saved from their browser when
+  they save the sale or change its status.
+- **Address privacy:** previews and ready-made posts show the street name without the house
+  number unless the seller ticks "Show my full address" (`sales.show_full_address`). The
+  sale page itself always shows the full address.
+- **Share tools** (seller's sale page): native share sheet / Facebook / Email / Text,
+  ready-to-paste posts (group post, Craigslist, text), and a downloadable square image.
+  Buyers get "Share" on the sale and "Share this item" on each item; `?item=<id>` opens it.
+- **Visit counts:** shared links carry `?src=` (qr, facebook, group, craigslist, text,
+  email, share, friend). Each browser session's first visit is recorded in `sale_visits`
+  (no personal data; the seller's own visits are skipped) and shown to the seller by source.
+- `NEXT_PUBLIC_SITE_URL` should include `https://`; the app adds it if missing.
+
 ## Checks & tests
 
 ```

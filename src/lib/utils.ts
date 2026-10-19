@@ -16,11 +16,14 @@ export function normalizePhone(p: string | null | undefined): string {
   return (p || "").replace(/\D/g, "");
 }
 
-/** Strips any trailing slash(es) so combining this with `/s/${slug}` never
- * produces a double slash, regardless of how NEXT_PUBLIC_SITE_URL was set. */
+/** The site's origin, e.g. "https://example.com". Strips trailing slash(es)
+ * so combining this with `/s/${slug}` never produces a double slash, and adds
+ * "https://" if NEXT_PUBLIC_SITE_URL was set without a scheme (a bare host
+ * makes QR codes, email links and link previews unusable). */
 export function siteOrigin(fallback = ""): string {
-  const raw = process.env.NEXT_PUBLIC_SITE_URL || fallback;
-  return raw.replace(/\/+$/, "");
+  const raw = (process.env.NEXT_PUBLIC_SITE_URL || fallback).trim().replace(/\/+$/, "");
+  if (!raw || /^https?:\/\//i.test(raw)) return raw;
+  return `${raw.startsWith("localhost") ? "http" : "https"}://${raw}`;
 }
 
 /** Item columns for the seller's admin view. item_holds (buyer name/phone) is
