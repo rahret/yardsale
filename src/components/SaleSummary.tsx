@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { Item, Sale, SaleDay } from "@/lib/types";
-import { topCategories } from "@/lib/share";
+import { saleLink, siteOriginForClient, topCategories } from "@/lib/share";
+import ShareButton from "@/components/ShareButton";
 import { PAYMENT_LABELS, featuredItems, openStatus, type OpenStatus } from "@/lib/saleInfo";
 import { money } from "@/lib/utils";
 import { photoUrl } from "@/components/PhotoUploader";
@@ -35,11 +36,6 @@ export default function SaleSummary({
   const available = items.filter((i) => i.status === "available" || i.status === "low_stock").length;
   const cats = topCategories(items, 5);
   const highlights = featuredItems(items);
-  const details = [
-    { label: "Early birds", value: sale.early_birds },
-    { label: "Parking", value: sale.parking },
-    { label: "If it rains", value: sale.rain_plan },
-  ].filter((d) => d.value?.trim());
   const ended = sale.status === "ended" || status?.state === "ended";
 
   const statusStyle =
@@ -71,6 +67,13 @@ export default function SaleSummary({
             📅 Add to calendar
           </a>
         )}
+        <ShareButton
+          url={saleLink(siteOriginForClient(), sale.slug, { src: "friend" })}
+          title={sale.name}
+          text={`Check out this yard sale: ${sale.name}`}
+          label="↗ Share"
+          className="text-xs font-bold text-ink bg-white border border-cardboard-dark/60 rounded-full px-3 py-1"
+        />
       </div>
 
       {sale.note?.trim() && (
@@ -127,27 +130,19 @@ export default function SaleSummary({
         </div>
       )}
 
-      {(sale.accepted_payments?.length > 0 || details.length > 0) && (
-        <div className="bg-white border-2 border-cardboard-dark/60 rounded-lg px-3.5 py-2.5 text-sm space-y-1.5">
-          {sale.accepted_payments?.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-bold opacity-60 mr-0.5">Pay with</span>
-              {sale.accepted_payments.map((m) => (
-                <span
-                  key={m}
-                  className="text-xs font-semibold bg-chalk border border-cardboard-dark/40 rounded-full px-2 py-0.5"
-                >
-                  {PAYMENT_LABELS[m]?.icon} {PAYMENT_LABELS[m]?.label ?? m}
-                </span>
-              ))}
-            </div>
-          )}
-          {details.map((d) => (
-            <div key={d.label}>
-              <span className="text-xs font-bold opacity-60">{d.label}: </span>
-              {d.value}
-            </div>
-          ))}
+      {sale.accepted_payments?.length > 0 && (
+        <div className="bg-white border-2 border-cardboard-dark/60 rounded-lg px-3.5 py-2.5 text-sm">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-bold opacity-60 mr-0.5">Pay with</span>
+            {sale.accepted_payments.map((m) => (
+              <span
+                key={m}
+                className="text-xs font-semibold bg-chalk border border-cardboard-dark/40 rounded-full px-2 py-0.5"
+              >
+                {PAYMENT_LABELS[m]?.icon} {PAYMENT_LABELS[m]?.label ?? m}
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>

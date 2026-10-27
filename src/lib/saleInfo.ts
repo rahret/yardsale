@@ -25,6 +25,15 @@ export function paymentMethodsFromProfile(options: Record<string, unknown> | nul
   return methods.length > 0 ? methods : ["cash"];
 }
 
+/** The seller's practical notes that are filled in, in display order. */
+export function saleDetails(sale: Pick<Sale, "early_birds" | "parking" | "rain_plan">): { label: string; value: string }[] {
+  return [
+    { label: "Early birds", value: sale.early_birds },
+    { label: "Parking", value: sale.parking },
+    { label: "If it rains", value: sale.rain_plan },
+  ].filter((d) => d.value?.trim());
+}
+
 export interface OpenStatus {
   state: "open" | "later" | "ended";
   label: string;
