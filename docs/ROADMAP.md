@@ -53,7 +53,9 @@ _Last updated: 2026-10-27_
 - ✅ **Sale-level details are missing:** payment methods (these are saved on the Account page
   but not shown publicly yet), early-bird policy, parking, and rain plan.
   - _Done (pending merge):_ per-sale payment methods shown as icons only (never handles;
-    pre-ticked from the Account page), plus early birds, parking and rain plan.
+    pre-ticked from the Account page).
+  - _Decided against:_ early birds, parking and rain plan fields — tried, then removed to
+    keep the page simple.
 - 🟡 **Changes don't show up live.** The buyer page refreshes every 4 seconds, so this is
   less stale than first thought, but it's polling rather than true live updates. The
   reservation function stops two people claiming the same item; the second person only finds

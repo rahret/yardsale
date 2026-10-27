@@ -18,7 +18,6 @@ import { photoUrl } from "@/components/PhotoUploader";
 import ShareButton from "@/components/ShareButton";
 import SaleSummary from "@/components/SaleSummary";
 import { saleLink, siteOriginForClient } from "@/lib/share";
-import { saleDetails } from "@/lib/saleInfo";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
 
@@ -100,7 +99,6 @@ export default function ShopView({
 
   const selected = items.find((i) => i.id === selectedId) || null;
   const sortedDays = useMemo(() => sortSaleDays(saleDays), [saleDays]);
-  const details = saleDetails(sale);
 
   function updateItem(next: Item) {
     setItems((prev) => prev.map((i) => (i.id === next.id ? next : i)));
@@ -117,37 +115,23 @@ export default function ShopView({
       <div className="px-5 pt-6 pb-4">
         <div className="font-marker text-3xl text-marker -rotate-1 break-words">{sale.name}</div>
         <div className="text-sm opacity-65 mt-1.5 break-words">{sale.tagline}</div>
-        {/* where/when on the left, the seller's practical notes on the right */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            {sale.street && (
-              <a
-                href={mapsUrl(formatAddress(sale))}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-sm font-semibold text-grass-dark mt-1.5 underline underline-offset-2"
-              >
-                📍 {formatAddress(sale)}
-              </a>
-            )}
-            {sortedDays.length > 0 && (
-              <div className="text-xs opacity-70 mt-1 font-semibold space-y-0.5">
-                {sortedDays.map((day) => (
-                  <div key={day.id}>🗓️ {formatSaleDay(day)}</div>
-                ))}
-              </div>
-            )}
+        {sale.street && (
+          <a
+            href={mapsUrl(formatAddress(sale))}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-sm font-semibold text-grass-dark mt-1.5 underline underline-offset-2"
+          >
+            📍 {formatAddress(sale)}
+          </a>
+        )}
+        {sortedDays.length > 0 && (
+          <div className="text-xs opacity-70 mt-1 font-semibold space-y-0.5">
+            {sortedDays.map((day) => (
+              <div key={day.id}>🗓️ {formatSaleDay(day)}</div>
+            ))}
           </div>
-          {details.length > 0 && (
-            <div className="max-w-[45%] text-right text-xs mt-1.5 space-y-1">
-              {details.map((d) => (
-                <div key={d.label} className="break-words">
-                  <span className="font-bold opacity-55">{d.label}:</span> <span className="opacity-80">{d.value}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       <SaleSummary sale={sale} items={items} days={sortedDays} onOpenItem={setSelectedId} />

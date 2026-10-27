@@ -14,7 +14,6 @@ import ShareSaleCard from "@/components/ShareSaleCard";
 const MAX_SALE_DAYS = 7;
 const MAX_FEATURED = 3;
 const NOTE_MAX = 120;
-const DETAIL_MAX = 100;
 
 type DayRow = { key: string; date: string; start_time: string; end_time: string };
 
@@ -83,9 +82,6 @@ export default function SaleAdmin({
     state: sale.state || "",
     zip: sale.zip || "",
     default_reservation_minutes: String(sale.default_reservation_minutes),
-    early_birds: sale.early_birds || "",
-    parking: sale.parking || "",
-    rain_plan: sale.rain_plan || "",
     accepted_payments:
       sale.accepted_payments?.length > 0 ? sale.accepted_payments : paymentMethodsFromProfile(profilePaymentOptions),
   });
@@ -206,9 +202,6 @@ export default function SaleAdmin({
       zip: saleForm.zip.trim(),
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
       timezone: browserTimeZone() ?? sale.timezone,
-      early_birds: saleForm.early_birds.trim().slice(0, DETAIL_MAX),
-      parking: saleForm.parking.trim().slice(0, DETAIL_MAX),
-      rain_plan: saleForm.rain_plan.trim().slice(0, DETAIL_MAX),
       accepted_payments: PAYMENT_METHODS.filter((m) => saleForm.accepted_payments.includes(m)),
     };
     const { data, error } = await supabase.from("sales").update(patch).eq("id", sale.id).select().single();
@@ -758,23 +751,6 @@ export default function SaleAdmin({
             {!(sale.accepted_payments?.length > 0) && " Pre-ticked from your Account page — save to show them."}
           </div>
         </Field>
-        {(
-          [
-            ["early_birds", "Early birds", "e.g. No early birds, please"],
-            ["parking", "Parking", "e.g. Park on the street, not the lawn"],
-            ["rain_plan", "If it rains", "e.g. Moves into the garage"],
-          ] as const
-        ).map(([key, label, placeholder]) => (
-          <Field key={key} label={`${label} (optional)`}>
-            <input
-              value={saleForm[key]}
-              maxLength={DETAIL_MAX}
-              onChange={(e) => setSaleForm({ ...saleForm, [key]: e.target.value })}
-              placeholder={placeholder}
-              className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
-            />
-          </Field>
-        ))}
         <Field label="Default reservation window (minutes)">
           <input
             type="number"

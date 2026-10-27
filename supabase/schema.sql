@@ -138,9 +138,10 @@ alter table public.sales add column if not exists timezone text;
 -- buyer-facing sale details shown at the top of the sale page
 -- short note the seller can change any time, e.g. "Everything half off after noon"
 alter table public.sales add column if not exists note text not null default '';
-alter table public.sales add column if not exists early_birds text not null default '';
-alter table public.sales add column if not exists parking text not null default '';
-alter table public.sales add column if not exists rain_plan text not null default '';
+-- early birds / parking / rain plan fields were tried and dropped
+alter table public.sales drop column if exists early_birds;
+alter table public.sales drop column if exists parking;
+alter table public.sales drop column if exists rain_plan;
 -- payment methods accepted at this sale, shown to buyers as icons only (the
 -- seller's actual handles stay private on their profile)
 alter table public.sales add column if not exists accepted_payments text[] not null default '{}';
