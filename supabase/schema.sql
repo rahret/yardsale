@@ -134,6 +134,19 @@ alter table public.sales add column if not exists show_full_address boolean not 
 -- seller's IANA time zone (e.g. 'America/Chicago'), captured from their
 -- browser when they save the sale, so "happening now" can be computed
 alter table public.sales add column if not exists timezone text;
+
+-- buyer-facing sale details shown at the top of the sale page
+-- short note the seller can change any time, e.g. "Everything half off after noon"
+alter table public.sales add column if not exists note text not null default '';
+alter table public.sales add column if not exists early_birds text not null default '';
+alter table public.sales add column if not exists parking text not null default '';
+alter table public.sales add column if not exists rain_plan text not null default '';
+-- payment methods accepted at this sale, shown to buyers as icons only (the
+-- seller's actual handles stay private on their profile)
+alter table public.sales add column if not exists accepted_payments text[] not null default '{}';
+alter table public.sales drop constraint if exists sales_accepted_payments_check;
+alter table public.sales add constraint sales_accepted_payments_check
+  check (accepted_payments <@ array['cash', 'card', 'venmo', 'cashapp', 'paypal', 'zelle']::text[]);
 alter table public.sales drop column if exists address;
 
 -- starts_at/ends_at (a single date range) were replaced by the sale_days
@@ -292,6 +305,9 @@ alter table public.items drop column if exists reserved_history;
 -- backfill for databases created before quantity tracking existed
 alter table public.items add column if not exists quantity_total int not null default 1;
 alter table public.items add column if not exists quantity_available int not null default 1;
+
+-- seller-picked highlights shown at the top of the sale page (up to 3 are shown)
+alter table public.items add column if not exists featured boolean not null default false;
 
 -- revenue: actual $ collected for this item so far, tracked separately from
 -- `price` (the list price) because a seller may negotiate a different sale

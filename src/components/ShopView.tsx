@@ -16,6 +16,7 @@ import {
 } from "@/lib/utils";
 import { photoUrl } from "@/components/PhotoUploader";
 import ShareButton from "@/components/ShareButton";
+import SaleSummary from "@/components/SaleSummary";
 import { saleLink, siteOriginForClient } from "@/lib/share";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
@@ -97,7 +98,6 @@ export default function ShopView({
   }, [items, filterCats, showSold, sort]);
 
   const selected = items.find((i) => i.id === selectedId) || null;
-  const availableCount = items.filter((i) => i.status === "available" || i.status === "low_stock").length;
   const sortedDays = useMemo(() => sortSaleDays(saleDays), [saleDays]);
 
   function updateItem(next: Item) {
@@ -133,15 +133,6 @@ export default function ShopView({
               ))}
             </div>
           )}
-          {sale.status === "live" ? (
-            <div className="inline-block mt-2 text-xs font-bold text-grass-dark bg-grass/15 border border-grass/40 rounded-full px-3 py-1">
-              🟢 {availableCount} item{availableCount === 1 ? "" : "s"} available
-            </div>
-          ) : (
-            <div className="inline-block mt-2 text-xs font-bold text-marker bg-marker/10 border border-marker/30 rounded-full px-3 py-1">
-              This sale has ended
-            </div>
-          )}
         </div>
         {/* Its own column, not floated inside the title block: the tilted
             (-rotate-1) title is painted above floats and swallowed taps. */}
@@ -155,6 +146,8 @@ export default function ShopView({
           />
         </div>
       </div>
+
+      <SaleSummary sale={sale} items={items} days={sortedDays} onOpenItem={setSelectedId} />
 
       <div className="px-5 pb-4 flex flex-wrap items-center gap-2">
         <div className="flex-1">

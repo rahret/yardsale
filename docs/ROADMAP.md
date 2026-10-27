@@ -31,21 +31,29 @@ _Last updated: 2026-10-27_
 - ⬜ **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
   Add arrow signs ("← YARD SALE, 2 blocks") with a small QR code, plus a quarter-page flyer
   for neighborhood boards.
-- ⬜ **There's no "remind me".** Let buyers add the sale to their calendar, or follow it and get
+- 🟡 **There's no "remind me".** Let buyers add the sale to their calendar, or follow it and get
   a message the morning it opens.
+  - _Done (pending merge):_ "Add to calendar" button (an .ics file with each remaining sale
+    day, address and link).
+  - _Still to do:_ follow a sale and get a message the morning it opens.
 
 ## 2. Helping buyers decide it's worth the trip
 
-- ⬜ **There's no quick summary at the top of the page.** Buyers decide in about five seconds.
+- ✅ **There's no quick summary at the top of the page.** Buyers decide in about five seconds.
   Add a cover photo, the top categories ("Furniture · Tools · Kids' clothes"), the item count
   and the total value, and two or three featured items, all before the full item list.
-- ⬜ **The page doesn't say whether the sale is open right now.** Add "Open now · closes 2P",
+  - _Done (pending merge):_ "What's here" categories, item count, and up to 3 highlights
+    (seller stars items with "☆ Feature"; otherwise the priciest items with photos). The
+    highlight photos act as the cover. Total value was deliberately left out.
+- ✅ **The page doesn't say whether the sale is open right now.** Add "Open now · closes 2P",
   "Opens tomorrow 8A" or "Ended", plus a short note from the seller ("Everything half off
   after noon", "Fill a bag for $5").
-  - _Groundwork exists:_ the seller's time zone is saved and `salePhase()` in
-    `src/lib/share.ts` already computes upcoming / now / ended for link previews.
-- ⬜ **Sale-level details are missing:** payment methods (these are saved on the Account page
+  - _Done (pending merge):_ open-status pill (updates every minute, seller's time zone) and a
+    "Note to buyers" the seller can post or change any time.
+- ✅ **Sale-level details are missing:** payment methods (these are saved on the Account page
   but not shown publicly yet), early-bird policy, parking, and rain plan.
+  - _Done (pending merge):_ per-sale payment methods shown as icons only (never handles;
+    pre-ticked from the Account page), plus early birds, parking and rain plan.
 - 🟡 **Changes don't show up live.** The buyer page refreshes every 4 seconds, so this is
   less stale than first thought, but it's polling rather than true live updates. The
   reservation function stops two people claiming the same item; the second person only finds
@@ -114,8 +122,8 @@ _Last updated: 2026-10-27_
     listing in "near me", seller stats, extra sign layouts).
 - 🟡 **Help sellers take payment.** Sellers can save how buyers pay them (cash, Venmo,
   Cash App, PayPal, Zelle) on the Account page.
-  - _To do:_ show those on the public sale page (profiles are private today, so copy them
-    onto each sale or add a public read rule for just those fields).
+  - _Done (pending merge):_ each sale shows which methods it accepts, as icons only. Handles
+    stay private.
   - _To do:_ card / Apple Pay / Google Pay via Stripe Connect (Express) — onboarding,
     payouts, webhook; `account_billing` already has the Connect columns.
 
@@ -137,3 +145,4 @@ _Last updated: 2026-10-27_
 | #14 | Link previews, share tools, item links, visit counts by source, `https://` fix for the site URL |
 | #15 | Upright photos and no past dates in link previews |
 | _pending_ | Buyer page Share button fix (tilted title was covering it) |
+| _pending_ | Buyer-page upgrade: open status, seller's note, what's here + highlights, payment icons & details, add to calendar |

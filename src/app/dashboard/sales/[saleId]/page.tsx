@@ -30,12 +30,19 @@ export default async function SaleAdminPage({ params }: { params: { saleId: stri
     .eq("sale_id", params.saleId)
     .order("date", { ascending: true });
 
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("payment_options")
+    .eq("id", sale.owner_id)
+    .maybeSingle();
+
   return (
     <SaleAdmin
       sale={sale}
       initialItems={items || []}
       initialSavedLocations={savedLocations || []}
       initialSaleDays={saleDays || []}
+      profilePaymentOptions={profile?.payment_options}
     />
   );
 }
