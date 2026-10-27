@@ -87,7 +87,7 @@ export function topCategories(items: Item[], limit = 3): string[] {
 export type SalePhase = "upcoming" | "now" | "ended";
 
 /** Wall-clock "YYYY-MM-DD" and "HH:MM" in the sale's time zone. */
-function localNow(timeZone: string, now: Date): { date: string; time: string } | null {
+export function localNow(timeZone: string, now: Date): { date: string; time: string } | null {
   try {
     const parts = new Intl.DateTimeFormat("en-CA", {
       timeZone,

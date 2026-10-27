@@ -20,6 +20,10 @@ export interface Sale extends Address {
   show_full_address: boolean;
   /** Seller's IANA time zone, e.g. "America/Chicago"; null until they save the sale. */
   timezone: string | null;
+  /** Short buyer-facing note, e.g. "Everything half off after noon". */
+  note: string;
+  /** Payment methods shown to buyers as icons (never the seller's handles). */
+  accepted_payments: PaymentMethod[];
   created_at: string;
   updated_at: string;
 }
@@ -72,6 +76,8 @@ export interface Item {
   sort_order: number;
   quantity_total: number;
   quantity_available: number;
+  /** Seller-picked highlight for the top of the sale page. */
+  featured: boolean;
   revenue: number;
   created_at: string;
   updated_at: string;
@@ -79,6 +85,9 @@ export interface Item {
   /** Who is holding this item — only returned to the sale's owner. */
   item_holds?: ItemHold | null;
 }
+
+export const PAYMENT_METHODS = ["cash", "card", "venmo", "cashapp", "paypal", "zelle"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export interface PaymentOptions {
   cash?: boolean;

@@ -16,6 +16,7 @@ import {
 } from "@/lib/utils";
 import { photoUrl } from "@/components/PhotoUploader";
 import ShareButton from "@/components/ShareButton";
+import SaleSummary from "@/components/SaleSummary";
 import { saleLink, siteOriginForClient } from "@/lib/share";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
@@ -97,7 +98,6 @@ export default function ShopView({
   }, [items, filterCats, showSold, sort]);
 
   const selected = items.find((i) => i.id === selectedId) || null;
-  const availableCount = items.filter((i) => i.status === "available" || i.status === "low_stock").length;
   const sortedDays = useMemo(() => sortSaleDays(saleDays), [saleDays]);
 
   function updateItem(next: Item) {
@@ -112,47 +112,29 @@ export default function ShopView({
 
   return (
     <div className="max-w-3xl mx-auto pb-10">
-      <div className="px-5 pt-6 pb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="float-right ml-3">
-            <ShareButton
-              url={saleLink(siteOriginForClient(), sale.slug, { src: "friend" })}
-              title={sale.name}
-              text={`Check out this yard sale: ${sale.name}`}
-              label="↗ Share"
-              className="border-2 border-cardboard-dark bg-white rounded-full px-3 py-1.5 text-xs font-bold"
-            />
+      <div className="px-5 pt-6 pb-4">
+        <div className="font-marker text-3xl text-marker -rotate-1 break-words">{sale.name}</div>
+        <div className="text-sm opacity-65 mt-1.5 break-words">{sale.tagline}</div>
+        {sale.street && (
+          <a
+            href={mapsUrl(formatAddress(sale))}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-sm font-semibold text-grass-dark mt-1.5 underline underline-offset-2"
+          >
+            📍 {formatAddress(sale)}
+          </a>
+        )}
+        {sortedDays.length > 0 && (
+          <div className="text-xs opacity-70 mt-1 font-semibold space-y-0.5">
+            {sortedDays.map((day) => (
+              <div key={day.id}>🗓️ {formatSaleDay(day)}</div>
+            ))}
           </div>
-          <div className="font-marker text-3xl text-marker -rotate-1 break-words">{sale.name}</div>
-          <div className="text-sm opacity-65 mt-1.5 break-words">{sale.tagline}</div>
-          {sale.street && (
-            <a
-              href={mapsUrl(formatAddress(sale))}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-sm font-semibold text-grass-dark mt-1.5 underline underline-offset-2"
-            >
-              📍 {formatAddress(sale)}
-            </a>
-          )}
-          {sortedDays.length > 0 && (
-            <div className="text-xs opacity-70 mt-1 font-semibold space-y-0.5">
-              {sortedDays.map((day) => (
-                <div key={day.id}>🗓️ {formatSaleDay(day)}</div>
-              ))}
-            </div>
-          )}
-          {sale.status === "live" ? (
-            <div className="inline-block mt-2 text-xs font-bold text-grass-dark bg-grass/15 border border-grass/40 rounded-full px-3 py-1">
-              🟢 {availableCount} item{availableCount === 1 ? "" : "s"} available
-            </div>
-          ) : (
-            <div className="inline-block mt-2 text-xs font-bold text-marker bg-marker/10 border border-marker/30 rounded-full px-3 py-1">
-              This sale has ended
-            </div>
-          )}
-        </div>
+        )}
       </div>
+
+      <SaleSummary sale={sale} items={items} days={sortedDays} onOpenItem={setSelectedId} />
 
       <div className="px-5 pb-4 flex flex-wrap items-center gap-2">
         <div className="flex-1">

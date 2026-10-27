@@ -4,13 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
-import type { Item, Sale, SaleDay, SaleStatus, SavedLocation } from "@/lib/types";
+import { PAYMENT_METHODS, type Item, type Sale, type SaleDay, type SaleStatus, type SavedLocation } from "@/lib/types";
+import { PAYMENT_LABELS, paymentMethodsFromProfile } from "@/lib/saleInfo";
 import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import FitText from "@/components/FitText";
 import ShareSaleCard from "@/components/ShareSaleCard";
 
 const MAX_SALE_DAYS = 7;
+const MAX_FEATURED = 3;
+const NOTE_MAX = 120;
 
 type DayRow = { key: string; date: string; start_time: string; end_time: string };
 
@@ -53,11 +56,14 @@ export default function SaleAdmin({
   initialItems,
   initialSavedLocations,
   initialSaleDays,
+  profilePaymentOptions,
 }: {
   sale: Sale;
   initialItems: Item[];
   initialSavedLocations: SavedLocation[];
   initialSaleDays: SaleDay[];
+  /** Payment options from the seller's Account page, used to pre-tick methods. */
+  profilePaymentOptions?: Record<string, unknown> | null;
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
@@ -76,7 +82,11 @@ export default function SaleAdmin({
     state: sale.state || "",
     zip: sale.zip || "",
     default_reservation_minutes: String(sale.default_reservation_minutes),
+    accepted_payments:
+      sale.accepted_payments?.length > 0 ? sale.accepted_payments : paymentMethodsFromProfile(profilePaymentOptions),
   });
+  const [note, setNote] = useState(sale.note || "");
+  const [noteStatus, setNoteStatus] = useState("");
   const [savingSale, setSavingSale] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>(initialSavedLocations);
@@ -129,6 +139,8 @@ export default function SaleAdmin({
       window.removeEventListener("afterprint", onAfterPrint);
     };
   }, [printJob]);
+
+  const featuredCount = items.filter((i) => i.featured && i.status !== "sold").length;
 
   const stats = useMemo(() => {
     const revenue = items.reduce((s, i) => s + (Number(i.revenue) || 0), 0);
@@ -190,6 +202,7 @@ export default function SaleAdmin({
       zip: saleForm.zip.trim(),
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
       timezone: browserTimeZone() ?? sale.timezone,
+      accepted_payments: PAYMENT_METHODS.filter((m) => saleForm.accepted_payments.includes(m)),
     };
     const { data, error } = await supabase.from("sales").update(patch).eq("id", sale.id).select().single();
     if (error) setSaveError(error.message);
@@ -409,6 +422,32 @@ export default function SaleAdmin({
     }
   }
 
+  async function saveNote() {
+    const { data, error } = await createClient()
+      .from("sales")
+      .update({ note: note.trim().slice(0, NOTE_MAX) })
+      .eq("id", sale.id)
+      .select()
+      .single();
+    if (error || !data) {
+      setNoteStatus("Couldn't save — try again.");
+      return;
+    }
+    setSale(data);
+    setNote(data.note);
+    setNoteStatus(data.note ? "Posted to your sale page." : "Note cleared.");
+  }
+
+  async function toggleFeatured(item: Item) {
+    const { data, error } = await createClient()
+      .from("items")
+      .update({ featured: !item.featured })
+      .eq("id", item.id)
+      .select(ITEM_SELECT)
+      .single();
+    if (!error && data) setItems((prev) => prev.map((i) => (i.id === item.id ? data : i)));
+  }
+
   function copyLink() {
     navigator.clipboard?.writeText(shareUrl);
   }
@@ -449,6 +488,40 @@ export default function SaleAdmin({
         </div>
         <div className="text-xs opacity-60 mt-2">
           {STATUS_OPTIONS.find((o) => o.value === sale.status)?.hint}
+        </div>
+      </Card>
+
+      {/* note to buyers */}
+      <Card title="📣 Note to buyers">
+        <div className="text-xs opacity-60 mb-2">
+          Shown at the top of your sale page. Change it any time, e.g. &ldquo;Everything half off after noon&rdquo;.
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={note}
+            maxLength={NOTE_MAX}
+            onChange={(e) => {
+              setNote(e.target.value);
+              setNoteStatus("");
+            }}
+            placeholder="Fill a bag for $5 after 1pm!"
+            className="flex-1 min-w-0 px-3 py-2 border-2 border-cardboard-dark rounded-lg text-sm"
+          />
+          <button
+            onClick={saveNote}
+            disabled={note.trim() === (sale.note || "").trim()}
+            className="bg-ink text-chalk font-bold px-4 rounded-lg text-sm disabled:opacity-40"
+          >
+            {note.trim() || !sale.note ? "Post" : "Clear"}
+          </button>
+        </div>
+        <div className="flex justify-between text-[11px] mt-1">
+          <span className={noteStatus.startsWith("Couldn") ? "text-marker font-semibold" : "text-grass-dark font-semibold"}>
+            {noteStatus}
+          </span>
+          <span className="opacity-50">
+            {note.length}/{NOTE_MAX}
+          </span>
         </div>
       </Card>
 
@@ -653,6 +726,31 @@ export default function SaleAdmin({
             + Add a day
           </button>
         </div>
+        <Field label="Payment methods shown to buyers">
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {PAYMENT_METHODS.map((m) => (
+              <label key={m} className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={saleForm.accepted_payments.includes(m)}
+                  onChange={(e) =>
+                    setSaleForm({
+                      ...saleForm,
+                      accepted_payments: e.target.checked
+                        ? [...saleForm.accepted_payments, m]
+                        : saleForm.accepted_payments.filter((x) => x !== m),
+                    })
+                  }
+                />
+                {PAYMENT_LABELS[m].icon} {PAYMENT_LABELS[m].label}
+              </label>
+            ))}
+          </div>
+          <div className="text-[11px] opacity-50 mt-1">
+            Buyers see only these names, never your handles.
+            {!(sale.accepted_payments?.length > 0) && " Pre-ticked from your Account page — save to show them."}
+          </div>
+        </Field>
         <Field label="Default reservation window (minutes)">
           <input
             type="number"
@@ -807,6 +905,12 @@ export default function SaleAdmin({
                 </div>
               </div>
               <div className="flex gap-1.5 flex-wrap mt-2">
+                <SmallBtn
+                  onClick={() => toggleFeatured(item)}
+                  disabled={!item.featured && featuredCount >= MAX_FEATURED}
+                >
+                  {item.featured ? "★ Featured" : "☆ Feature"}
+                </SmallBtn>
                 <SmallBtn onClick={() => (editingId === item.id ? setEditingId(null) : startEdit(item))}>
                   Edit
                 </SmallBtn>
