@@ -1,0 +1,139 @@
+# Yard Sale QR — Feature Roadmap
+
+A running list of features for future consideration. Update it as features ship and new
+ideas come up.
+
+**Goal of the service:** help people increase traffic and sales at their physical yard
+sale. The QR code and printed sign replace the usual hand-written sign with limited info;
+each sale page lets the seller build and organize their sale, and lets buyers see whether
+the sale is worth visiting.
+
+**Status key:** ✅ Done · 🟡 Partly done · ⬜ Not started
+
+_Last updated: 2026-10-27_
+
+---
+
+## 1. Getting traffic (the biggest gap)
+
+- ✅ **Shared links show nothing about the sale.** Sale pages don't set their own preview
+  information, so a link pasted into Facebook, Nextdoor, a group text or Craigslist shows the
+  generic "Yard Sale QR" card. It should show the sale name, dates, the neighborhood and a few
+  item photos. This is cheap to build and probably the biggest single boost to traffic.
+  - _Shipped in #14, fixed in #15:_ per-sale and per-item previews with a generated image
+    (item photos, name, dates, street without house number), "Happening now" / "Sale ended"
+    badge, Share button and ready-to-paste posts for sellers, downloadable square image.
+- ⬜ **Buyers can't find sales on their own.** You can only reach a sale through its link. A
+  "sales near me this weekend" map or list would help, searchable by distance, date and
+  category ("furniture within 5 miles, Saturday"). That needs map coordinates for each sale,
+  which the database doesn't store yet. It's also your strongest reason for buyers to come
+  back, and a natural paid feature: promote a sale to the top of the list.
+- ⬜ **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
+  Add arrow signs ("← YARD SALE, 2 blocks") with a small QR code, plus a quarter-page flyer
+  for neighborhood boards.
+- ⬜ **There's no "remind me".** Let buyers add the sale to their calendar, or follow it and get
+  a message the morning it opens.
+
+## 2. Helping buyers decide it's worth the trip
+
+- ⬜ **There's no quick summary at the top of the page.** Buyers decide in about five seconds.
+  Add a cover photo, the top categories ("Furniture · Tools · Kids' clothes"), the item count
+  and the total value, and two or three featured items, all before the full item list.
+- ⬜ **The page doesn't say whether the sale is open right now.** Add "Open now · closes 2P",
+  "Opens tomorrow 8A" or "Ended", plus a short note from the seller ("Everything half off
+  after noon", "Fill a bag for $5").
+  - _Groundwork exists:_ the seller's time zone is saved and `salePhase()` in
+    `src/lib/share.ts` already computes upcoming / now / ended for link previews.
+- ⬜ **Sale-level details are missing:** payment methods (these are saved on the Account page
+  but not shown publicly yet), early-bird policy, parking, and rain plan.
+- 🟡 **Changes don't show up live.** The buyer page refreshes every 4 seconds, so this is
+  less stale than first thought, but it's polling rather than true live updates. The
+  reservation function stops two people claiming the same item; the second person only finds
+  out when they try. _Possible upgrade:_ Supabase Realtime instead of polling.
+- ✅ **Items can't be linked to directly.** A seller can't share a link to just the couch.
+  - _Shipped in #14:_ `?item=<id>` opens that item, with its own link preview; buyers get
+    "Share this item".
+
+## 3. Helping sellers organize the sale
+
+- ⬜ **The seller isn't told about reservations.** Nothing sends a text or email when someone
+  reserves an item, so the seller has to keep checking the dashboard. The README already
+  lists texting buyers about expiring holds as a next step.
+- ⬜ **Adding items is slow.** Typing in 80 items is the biggest reason sellers will give up. A
+  photo-first flow would help: snap photos in a row and fill in each item from the photo,
+  with AI suggesting a name, category and price.
+  - _Proposed "Snap & list" flow:_ quick-add camera mode (one photo = one item, "add another
+    angle"), background upload, AI suggests name / category / price / description / quantity
+    and flags multi-item or blurry photos, then a review stack with price chips (−$1 / +$1,
+    $1 / $5 / $10 / $20) and "approve all that look good". Items stay hidden drafts until
+    approved. Optional per-sale pricing style ("Priced to move / Fair / Firm").
+  - _Tech:_ phone shrinks photos to ~1,000px before upload; a server route
+    (`/api/items/suggest`) checks ownership and calls Claude with a fixed output format; one
+    request per photo, several at a time; per-seller hourly cap. Needs `ANTHROPIC_API_KEY`.
+  - _Rough cost:_ Claude Opus 5.5 ~1–2¢ per photo (~$1–1.50 per 80 items); Claude Haiku 5.5
+    ~0.05¢ per photo, but weaker at pricing. Test both on 30–50 real photos.
+  - _Open decisions:_ free vs. limited free vs. paid feature; which model; hidden drafts
+    until approved (recommended yes).
+- ⬜ **There are no printed price tags.** Printing tag sheets that match the listing (and
+  optionally carry each item's QR code) ties the physical sale to the online one.
+- ⬜ **Each sale starts from scratch.** Add "copy this sale" and "move unsold items to my next
+  sale", plus multi-family sales with several sellers on one sale.
+- 🟡 **There are no numbers.** Sellers can't see page views, QR scans versus link visits,
+  most-viewed items or reservations. That's what proves the app brought them buyers, and it's
+  the clearest thing to put on a paid plan.
+  - _Shipped in #14:_ visit counts by source (QR / sign, Facebook, group posts, Craigslist,
+    text, email, share button, shared by buyers) in the Share card.
+  - _Still to do:_ most-viewed items (item visits are already recorded), reservations and
+    sales over time, a proper stats view.
+
+## 4. Basic gaps
+
+- ✅ **There's no "forgot password" on the login page.** Users who forget theirs are locked
+  out.
+  - _Shipped in #13:_ Forgot password / reset pages; stronger password rules (8–20
+    characters, upper, lower, number, one of `~ ! @ # $ % ^ & * ? = +`).
+- ✅ **Reservations aren't protected against abuse.** One person can fake phone numbers and
+  hold every item.
+  - _Shipped in #13:_ real-looking 10-digit phone required, one reservation per phone per
+    sale, per-device limits (3 per sale, 10 per hour). Buyer names and phones moved out of
+    public view (owner-only `item_holds`).
+  - _Possible upgrade:_ SMS verification code for reservations.
+- ✅ **There's no safety checking.** No automated tests, no lint setup and no checks that run
+  on GitHub, so problems are only caught by hand.
+  - _Shipped in #13:_ ESLint, Vitest unit tests, SQL tests for the schema, GitHub Actions CI.
+
+---
+
+## 5. Monetization & payments
+
+- 🟡 **Subscriptions (seller plans).** Account page shows the plan and an "Upgrade to Pro"
+  placeholder; `account_billing` table is ready (read-only to users, written by Stripe
+  webhooks).
+  - _To do:_ Stripe Checkout + customer billing portal, webhook to update `account_billing`,
+    decide plans/prices and which features are Pro (candidates: AI item entry, promoted
+    listing in "near me", seller stats, extra sign layouts).
+- 🟡 **Help sellers take payment.** Sellers can save how buyers pay them (cash, Venmo,
+  Cash App, PayPal, Zelle) on the Account page.
+  - _To do:_ show those on the public sale page (profiles are private today, so copy them
+    onto each sale or add a public read rule for just those fields).
+  - _To do:_ card / Apple Pay / Google Pay via Stripe Connect (Express) — onboarding,
+    payouts, webhook; `account_billing` already has the Connect columns.
+
+## 6. Other ideas & follow-ups
+
+- ⬜ Seller-side live updates on the dashboard (reservations appear without reloading).
+- ⬜ Item photos are stored at full phone size; shrinking them on upload would speed up the
+  buyer page and save storage.
+- ⬜ Deleting an item doesn't remove its photo files from storage (account deletion does).
+
+---
+
+## Done log
+
+| PR | What shipped |
+| --- | --- |
+| #12 | Sign layout (fit-to-width text, QR/details 50/50, compact times), hour-only sale times, Account page, `account_billing` table |
+| #13 | Buyer privacy fix, reservation abuse limits, forgot/reset password, password rules, logout 405 fix, lint/tests/CI |
+| #14 | Link previews, share tools, item links, visit counts by source, `https://` fix for the site URL |
+| #15 | Upright photos and no past dates in link previews |
+| _pending_ | Buyer page Share button fix (tilted title was covering it) |
