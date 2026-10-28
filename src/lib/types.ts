@@ -24,8 +24,6 @@ export interface Sale extends Address {
   note: string;
   /** Payment methods shown to buyers as icons (never the seller's handles). */
   accepted_payments: PaymentMethod[];
-  /** Online "Buy Now" through Stripe is on for this sale. */
-  buy_now_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -80,6 +78,8 @@ export interface Item {
   quantity_available: number;
   /** Seller-picked highlight for the top of the sale page. */
   featured: boolean;
+  /** How buyers get it: hold and pay in person, or Buy Now online. Never both. */
+  sell_mode: SellMode;
   revenue: number;
   created_at: string;
   updated_at: string;
@@ -87,6 +87,8 @@ export interface Item {
   /** Who is holding this item — only returned to the sale's owner. */
   item_holds?: ItemHold | null;
 }
+
+export type SellMode = "hold" | "buy_now";
 
 export const PAYMENT_METHODS = ["cash", "card", "venmo", "cashapp", "paypal", "zelle"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];

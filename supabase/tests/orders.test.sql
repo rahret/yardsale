@@ -4,8 +4,8 @@
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000c1', 'orders-seller@example.com'),
   ('00000000-0000-0000-0000-0000000000c2', 'orders-other@example.com');
-insert into public.sales (id, owner_id, slug, status, buy_now_enabled) values
-  ('c0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000c1', 'orders-sale', 'live', true);
+insert into public.sales (id, owner_id, slug, status) values
+  ('c0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000c1', 'orders-sale', 'live');
 insert into public.items (id, sale_id, name, price, status, reserved_at) values
   ('d0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'rocking chair', 25, 'available', null),
   ('d0000000-0000-0000-0000-000000000002', 'c0000000-0000-0000-0000-000000000001', 'bike', 100, 'reserved', now()),
@@ -85,5 +85,22 @@ begin
 end;
 $$;
 reset role;
+
+-- Buy Now and Hold are mutually exclusive per item
+insert into public.items (id, sale_id, name, price, sell_mode) values
+  ('d0000000-0000-0000-0000-000000000009', 'c0000000-0000-0000-0000-000000000001', 'dresser', 80, 'buy_now');
+do $$
+begin
+  assert (public.reserve_item('d0000000-0000-0000-0000-000000000009', 'Pat', '312-555-0177') ->> 'error') like '%use Buy Now%',
+    'holds are refused on Buy Now items';
+  assert (select status from public.items where id = 'd0000000-0000-0000-0000-000000000009') = 'available', 'still available';
+  begin
+    insert into public.items (sale_id, name, price, sell_mode, quantity_total, quantity_available)
+    values ('c0000000-0000-0000-0000-000000000001', 'books', 1, 'buy_now', 20, 20);
+    raise exception 'bulk items must not be Buy Now';
+  exception when check_violation then null;
+  end;
+end;
+$$;
 
 \echo 'orders.test.sql: all checks passed'

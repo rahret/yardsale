@@ -149,10 +149,9 @@ alter table public.sales drop constraint if exists sales_accepted_payments_check
 alter table public.sales add constraint sales_accepted_payments_check
   check (accepted_payments <@ array['cash', 'card', 'venmo', 'cashapp', 'paypal', 'zelle']::text[]);
 
--- "Buy Now" (card / Apple Pay / Google Pay / Cash App Pay through Stripe):
--- off by default; when on, every single item Stripe can charge for (50¢+) can
--- be paid for online. Holds stay available for everything.
-alter table public.sales add column if not exists buy_now_enabled boolean not null default false;
+-- a sale-wide "Buy Now" switch was tried; Buy Now is now chosen per item
+-- (items.sell_mode)
+alter table public.sales drop column if exists buy_now_enabled;
 -- a per-sale minimum price for Buy Now was tried and dropped
 alter table public.sales drop column if exists buy_now_min_price;
 alter table public.sales drop column if exists address;
@@ -316,6 +315,14 @@ alter table public.items add column if not exists quantity_available int not nul
 
 -- seller-picked highlights shown at the top of the sale page (up to 3 are shown)
 alter table public.items add column if not exists featured boolean not null default false;
+
+-- how buyers get a single item: 'hold' (reserve, pay in person) or 'buy_now'
+-- (pay online through Stripe, pick up with a code) — never both. Bulk items
+-- are first come, first served in person, so they're always 'hold'.
+alter table public.items add column if not exists sell_mode text not null default 'hold';
+alter table public.items drop constraint if exists items_sell_mode_check;
+alter table public.items add constraint items_sell_mode_check
+  check (sell_mode in ('hold', 'buy_now') and (sell_mode = 'hold' or quantity_total = 1));
 
 -- revenue: actual $ collected for this item so far, tracked separately from
 -- `price` (the list price) because a seller may negotiate a different sale
@@ -967,6 +974,9 @@ begin
 
   if v_item.quantity_total > 1 then
     return jsonb_build_object('success', false, 'error', 'This is a bulk item sold in person — it can''t be reserved.');
+  end if;
+  if v_item.sell_mode = 'buy_now' then
+    return jsonb_build_object('success', false, 'error', 'This item can''t be held — use Buy Now to pay for it online.');
   end if;
 
   select * into v_sale from public.sales where id = v_item.sale_id for update;

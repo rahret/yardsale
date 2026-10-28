@@ -8,31 +8,31 @@ import { money } from "@/lib/utils";
 
 const ORDER_STATUSES = ["paid", "picked_up", "refunded", "conflict"];
 
-/** Seller-side Buy Now: the on/off switch and minimum price for this sale,
- * plus the list of online orders with "Picked up" and "Refund". */
+/** Seller-side Buy Now: setup status, what fees mean, and the list of online
+ * orders with "Picked up" and "Refund". (Each item chooses Buy Now or Hold.) */
 export default function BuyNowCard({
   sale,
   payoutsReady,
+  hasBuyNowItems,
   initialOrders,
-  onSaleChange,
   onItemsChanged,
 }: {
-  sale: Sale;
+  sale: Pick<Sale, "id">;
   payoutsReady: boolean;
+  /** Any item on this sale is set to Buy Now (so orders may arrive). */
+  hasBuyNowItems: boolean;
   initialOrders: Order[];
-  onSaleChange: (sale: Sale) => void;
   /** An order changed an item (refund puts it back on sale). */
   onItemsChanged: () => void;
 }) {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
-  const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmRefundId, setConfirmRefundId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   // new online orders arrive while the seller has this page open
   useEffect(() => {
-    if (!sale.buy_now_enabled && orders.length === 0) return;
+    if (!hasBuyNowItems && orders.length === 0) return;
     const supabase = createClient();
     const load = async () => {
       const { data } = await supabase
@@ -45,16 +45,7 @@ export default function BuyNowCard({
     };
     const t = setInterval(load, 20_000);
     return () => clearInterval(t);
-  }, [sale.id, sale.buy_now_enabled, orders.length]);
-
-  async function save(patch: Partial<Pick<Sale, "buy_now_enabled">>) {
-    setSaving(true);
-    setError("");
-    const { data, error } = await createClient().from("sales").update(patch).eq("id", sale.id).select().single();
-    setSaving(false);
-    if (error || !data) setError("Couldn't save — try again.");
-    else onSaleChange(data);
-  }
+  }, [sale.id, hasBuyNowItems, orders.length]);
 
   async function act(order: Order, action: "pickup" | "refund") {
     setBusyId(order.id);
@@ -86,23 +77,13 @@ export default function BuyNowCard({
         </div>
       ) : (
         <>
-          <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={sale.buy_now_enabled}
-              disabled={saving}
-              onChange={(e) => save({ buy_now_enabled: e.target.checked })}
-            />
-            <span>
-              <strong>Offer Buy Now</strong> on this sale
-              <span className="block text-xs opacity-60">
-                Buyers pay online and pick up with a code. Holds stay available for everything.
-              </span>
-            </span>
-          </label>
+          <div className="text-sm">
+            <span className="text-grass-dark font-semibold">● Ready.</span> Choose <strong>💳 Buy Now</strong> or{" "}
+            <strong>✋ Hold</strong> for each item when you add or edit it. Buy Now items are paid online and picked
+            up with a code; Hold items are reserved and paid in person.
+          </div>
           <div className="text-[11px] opacity-60 mt-2">
-            Card fees come out of each sale: on a {money(25)} item you&apos;d receive about{" "}
+            Card fees come out of each Buy Now sale: on a {money(25)} item you&apos;d receive about{" "}
             {money(sellerNetCents(exampleCents) / 100)}, and on a {money(2)} item about{" "}
             {money(sellerNetCents(toCents(2)) / 100)}. Bulk items and anything under {money(MIN_CHARGE_CENTS / 100)}{" "}
             (Stripe&apos;s minimum) can only be held. If a buyer doesn&apos;t show up, you can refund them below.

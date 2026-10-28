@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   const sale = item.sales as Sale;
 
   if (sale.status !== "live") return unavailable("This sale isn't open for purchases.");
-  if (!sale.buy_now_enabled) return unavailable("This seller isn't taking online payments.");
+  if (item.sell_mode !== "buy_now") return unavailable("This item is held and paid for in person.");
   if (!canBuyOnline(item)) return unavailable("This item can't be bought online — hold it and pay in person.");
   if (item.status === "sold") return unavailable("Sorry, this item has already sold.");
   if (item.status === "reserved" && !isEffectivelyExpired(item as Item, sale)) {
