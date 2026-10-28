@@ -37,6 +37,15 @@ export function sellerNetCents(amountCents: number, s: FeeSettings = feeSettings
   return amountCents - applicationFeeCents(amountCents, s);
 }
 
+/** Stripe won't charge less than 50¢ (USD), so cheaper items can only be held. */
+export const MIN_CHARGE_CENTS = 50;
+
+/** Whether an item can be bought online (when the sale has Buy Now on):
+ * single items Stripe is able to charge for. */
+export function canBuyOnline(item: { price: number | string; quantity_total: number }): boolean {
+  return item.quantity_total === 1 && toCents(item.price) >= MIN_CHARGE_CENTS;
+}
+
 /** Dollars (as stored on items) to whole cents. */
 export function toCents(dollars: number | string): number {
   return Math.round(Number(dollars) * 100);

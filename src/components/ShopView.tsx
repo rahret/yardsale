@@ -17,6 +17,7 @@ import {
 import { photoUrl } from "@/components/PhotoUploader";
 import ShareButton from "@/components/ShareButton";
 import SaleSummary from "@/components/SaleSummary";
+import { canBuyOnline } from "@/lib/fees";
 import { saleLink, siteOriginForClient } from "@/lib/share";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
@@ -353,11 +354,7 @@ function DetailSheet({
   const [photoIdx, setPhotoIdx] = useState(0);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState("");
-  const canBuyNow =
-    sale.buy_now_enabled &&
-    !isBulkItem(item) &&
-    Number(item.price) > 0 &&
-    Number(item.price) >= Number(sale.buy_now_min_price);
+  const canBuyNow = sale.buy_now_enabled && canBuyOnline(item);
 
   async function buyNow() {
     setBuyError("");

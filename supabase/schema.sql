@@ -150,10 +150,11 @@ alter table public.sales add constraint sales_accepted_payments_check
   check (accepted_payments <@ array['cash', 'card', 'venmo', 'cashapp', 'paypal', 'zelle']::text[]);
 
 -- "Buy Now" (card / Apple Pay / Google Pay / Cash App Pay through Stripe):
--- off by default; when on, items priced at or above the minimum can be paid
--- for online. Holds stay available for everything.
+-- off by default; when on, every single item Stripe can charge for (50¢+) can
+-- be paid for online. Holds stay available for everything.
 alter table public.sales add column if not exists buy_now_enabled boolean not null default false;
-alter table public.sales add column if not exists buy_now_min_price numeric(10, 2) not null default 10;
+-- a per-sale minimum price for Buy Now was tried and dropped
+alter table public.sales drop column if exists buy_now_min_price;
 alter table public.sales drop column if exists address;
 
 -- starts_at/ends_at (a single date range) were replaced by the sale_days

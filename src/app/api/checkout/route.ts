@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { requestOrigin } from "@/lib/saleData";
-import { applicationFeeCents, pickupCode, toCents } from "@/lib/fees";
+import { applicationFeeCents, canBuyOnline, pickupCode, toCents } from "@/lib/fees";
 import { publicPhotoUrl } from "@/lib/share";
 import { checkoutSessionParams } from "@/lib/checkout";
 import { isEffectivelyExpired } from "@/lib/utils";
@@ -34,10 +34,7 @@ export async function POST(request: NextRequest) {
 
   if (sale.status !== "live") return unavailable("This sale isn't open for purchases.");
   if (!sale.buy_now_enabled) return unavailable("This seller isn't taking online payments.");
-  if (item.quantity_total > 1) return unavailable("This item is sold in person only.");
-  if (Number(item.price) < Number(sale.buy_now_min_price) || Number(item.price) <= 0) {
-    return unavailable("This item can't be bought online — hold it and pay in person.");
-  }
+  if (!canBuyOnline(item)) return unavailable("This item can't be bought online — hold it and pay in person.");
   if (item.status === "sold") return unavailable("Sorry, this item has already sold.");
   if (item.status === "reserved" && !isEffectivelyExpired(item as Item, sale)) {
     return unavailable("Someone is holding this item right now.");

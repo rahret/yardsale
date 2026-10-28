@@ -26,8 +26,6 @@ export interface Sale extends Address {
   accepted_payments: PaymentMethod[];
   /** Online "Buy Now" through Stripe is on for this sale. */
   buy_now_enabled: boolean;
-  /** Items priced at or above this can be bought online. */
-  buy_now_min_price: number;
   created_at: string;
   updated_at: string;
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Order, Sale } from "@/lib/types";
-import { sellerNetCents, toCents } from "@/lib/fees";
+import { MIN_CHARGE_CENTS, sellerNetCents, toCents } from "@/lib/fees";
 import { money } from "@/lib/utils";
 
 const ORDER_STATUSES = ["paid", "picked_up", "refunded", "conflict"];
@@ -25,7 +25,6 @@ export default function BuyNowCard({
   onItemsChanged: () => void;
 }) {
   const [orders, setOrders] = useState<Order[]>(initialOrders);
-  const [minPrice, setMinPrice] = useState(String(sale.buy_now_min_price ?? 10));
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmRefundId, setConfirmRefundId] = useState<string | null>(null);
@@ -48,7 +47,7 @@ export default function BuyNowCard({
     return () => clearInterval(t);
   }, [sale.id, sale.buy_now_enabled, orders.length]);
 
-  async function save(patch: Partial<Pick<Sale, "buy_now_enabled" | "buy_now_min_price">>) {
+  async function save(patch: Partial<Pick<Sale, "buy_now_enabled">>) {
     setSaving(true);
     setError("");
     const { data, error } = await createClient().from("sales").update(patch).eq("id", sale.id).select().single();
@@ -73,7 +72,6 @@ export default function BuyNowCard({
   }
 
   const exampleCents = toCents(25);
-  const min = Math.max(1, Number(minPrice) || 0);
 
   return (
     <div>
@@ -103,28 +101,11 @@ export default function BuyNowCard({
               </span>
             </span>
           </label>
-          {sale.buy_now_enabled && (
-            <div className="mt-3 flex items-center gap-2 flex-wrap text-sm">
-              <span>For items priced</span>
-              <span className="flex items-center">
-                $
-                <input
-                  type="number"
-                  min={1}
-                  step="1"
-                  value={minPrice}
-                  onChange={(e) => setMinPrice(e.target.value)}
-                  onBlur={() => Number(sale.buy_now_min_price) !== min && save({ buy_now_min_price: min })}
-                  className="w-20 ml-1 px-2 py-1 border-2 border-cardboard-dark rounded-lg"
-                />
-              </span>
-              <span>and up</span>
-            </div>
-          )}
           <div className="text-[11px] opacity-60 mt-2">
             Card fees come out of each sale: on a {money(25)} item you&apos;d receive about{" "}
-            {money(sellerNetCents(exampleCents) / 100)}. Small items lose a bigger share, so cheap things are better
-            held and paid in person. If a buyer doesn&apos;t show up, you can refund them below.
+            {money(sellerNetCents(exampleCents) / 100)}, and on a {money(2)} item about{" "}
+            {money(sellerNetCents(toCents(2)) / 100)}. Bulk items and anything under {money(MIN_CHARGE_CENTS / 100)}{" "}
+            (Stripe&apos;s minimum) can only be held. If a buyer doesn&apos;t show up, you can refund them below.
           </div>
         </>
       )}
