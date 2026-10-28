@@ -24,6 +24,10 @@ export interface Sale extends Address {
   note: string;
   /** Payment methods shown to buyers as icons (never the seller's handles). */
   accepted_payments: PaymentMethod[];
+  /** Online "Buy Now" through Stripe is on for this sale. */
+  buy_now_enabled: boolean;
+  /** Items priced at or above this can be bought online. */
+  buy_now_min_price: number;
   created_at: string;
   updated_at: string;
 }
@@ -119,4 +123,26 @@ export interface AccountBilling {
   connect_charges_enabled: boolean;
   connect_payouts_enabled: boolean;
   updated_at: string;
+}
+
+export type OrderStatus = "pending" | "paid" | "conflict" | "refunded" | "picked_up" | "expired";
+
+/** An online "Buy Now" purchase. */
+export interface Order {
+  id: string;
+  sale_id: string;
+  item_id: string | null;
+  item_name: string;
+  amount_cents: number;
+  fee_cents: number;
+  status: OrderStatus;
+  pickup_code: string;
+  buyer_name: string | null;
+  buyer_email: string | null;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  created_at: string;
+  paid_at: string | null;
+  picked_up_at: string | null;
+  refunded_at: string | null;
 }

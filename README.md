@@ -103,13 +103,58 @@ password length to 8 and require lowercase, uppercase, digits and symbols.
 In Supabase → Authentication → URL Configuration, make sure your site's
 `/auth/callback**` URL is in the Redirect URLs allow-list.
 
+## Buy Now (online payments with Stripe)
+
+Buyers can pay for an item online (card, Apple Pay, Google Pay, Cash App Pay) and pick it up
+with a 4-digit code; holds still work for everything. Money goes to the seller through
+**Stripe Connect** (Express accounts, destination charges). The app keeps an application fee
+equal to Stripe's processing fee (which the platform pays on these charges) plus an optional
+platform cut.
+
+How it fits together:
+
+- `/api/stripe/connect` — seller onboarding (creates their Express account, sends them to
+  Stripe); `/api/stripe/connect/return` refreshes their status; `/api/stripe/dashboard`
+  opens their payouts dashboard.
+- `/api/checkout` — starts Stripe Checkout for one item (server re-checks everything).
+- `/api/stripe/webhook` — marks orders paid via the `complete_order` database function. If two
+  people paid for the same item, the second is refunded automatically.
+- `/s/[slug]/order` — the buyer's confirmation page with the pickup code (also confirms the
+  payment directly with Stripe, so it doesn't depend on webhook timing).
+- `/api/orders/[id]/pickup` and `/refund` — the seller's "Picked up" and "Refund" buttons.
+- `orders` table — readable by the sale's owner; written only by the server.
+
+Setup:
+
+1. Create a Stripe account and turn on **Connect** (Express). Start in **test mode**.
+2. Dashboard → Settings → **Payment methods**: enable Cards, Apple Pay, Google Pay and
+   **Cash App Pay**. Checkout shows whatever is enabled there.
+3. Dashboard → Settings → **Customer emails**: turn on receipts for successful payments
+   (the receipt includes the pickup code).
+4. Add a webhook endpoint `https://<your site>/api/stripe/webhook` for
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed` and `checkout.session.expired`. Add a second
+   endpoint to the same URL that listens to **connected accounts** for `account.updated`.
+5. In Vercel, set these server-only variables:
+   - `STRIPE_SECRET_KEY`
+   - `STRIPE_WEBHOOK_SECRET` (first endpoint) and `STRIPE_CONNECT_WEBHOOK_SECRET` (second)
+   - `SUPABASE_SERVICE_ROLE_KEY` (Supabase → Settings → API; never expose it to the browser)
+   - optional `NEXT_PUBLIC_PLATFORM_FEE_PERCENT` (default 0), and
+     `NEXT_PUBLIC_STRIPE_FEE_PERCENT` / `NEXT_PUBLIC_STRIPE_FEE_FIXED_CENTS` if your Stripe
+     rate isn't 2.9% + 30¢.
+6. Re-run `supabase/schema.sql`.
+
+Without these variables the app still runs; Buy Now just reports that online payment isn't
+available. `npm test` includes payload checks against
+[stripe-mock](https://github.com/stripe/stripe-mock) when `STRIPE_MOCK_PORT` is set.
+
 ## Notes / things to customize
 
 - **SMS reminders** aren't included — buyers just give a phone number shown to the
   seller in the admin panel. Wiring up Twilio to text buyers when their hold is about to
   expire would be a natural next step.
-- **Payments** aren't processed yet — sellers list how buyers can pay them (cash, Venmo,
-  Cash App, PayPal, Zelle) on the Account page. The `account_billing` table is in place
+- **Payments** — see "Buy Now" above. Sellers can also list other ways to pay (cash, Venmo,
+  Cash App, PayPal, Zelle) on the Account page; buyers see only the method names. The `account_billing` table is in place
   for Stripe subscriptions (seller plans) and Stripe Connect (card / Apple Pay payouts
   to sellers); it is read-only to users and meant to be written by Stripe webhooks
   using the service-role key.

@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
-import { PAYMENT_METHODS, type Item, type Sale, type SaleDay, type SaleStatus, type SavedLocation } from "@/lib/types";
+import { PAYMENT_METHODS, type Item, type Order, type Sale, type SaleDay, type SaleStatus, type SavedLocation } from "@/lib/types";
 import { PAYMENT_LABELS, paymentMethodsFromProfile } from "@/lib/saleInfo";
 import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import FitText from "@/components/FitText";
 import ShareSaleCard from "@/components/ShareSaleCard";
+import BuyNowCard from "@/components/BuyNowCard";
 
 const MAX_SALE_DAYS = 7;
 const MAX_FEATURED = 3;
@@ -57,6 +58,8 @@ export default function SaleAdmin({
   initialSavedLocations,
   initialSaleDays,
   profilePaymentOptions,
+  payoutsReady = false,
+  initialOrders = [],
 }: {
   sale: Sale;
   initialItems: Item[];
@@ -64,6 +67,9 @@ export default function SaleAdmin({
   initialSaleDays: SaleDay[];
   /** Payment options from the seller's Account page, used to pre-tick methods. */
   profilePaymentOptions?: Record<string, unknown> | null;
+  /** The seller's Stripe account can take payments. */
+  payoutsReady?: boolean;
+  initialOrders?: Order[];
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
@@ -422,6 +428,15 @@ export default function SaleAdmin({
     }
   }
 
+  async function reloadItems() {
+    const { data } = await createClient()
+      .from("items")
+      .select(ITEM_SELECT)
+      .eq("sale_id", sale.id)
+      .order("created_at", { ascending: false });
+    if (data) setItems(data);
+  }
+
   async function saveNote() {
     const { data, error } = await createClient()
       .from("sales")
@@ -523,6 +538,17 @@ export default function SaleAdmin({
             {note.length}/{NOTE_MAX}
           </span>
         </div>
+      </Card>
+
+      {/* online payments */}
+      <Card title="💳 Buy Now (online payments)">
+        <BuyNowCard
+          sale={sale}
+          payoutsReady={payoutsReady}
+          initialOrders={initialOrders}
+          onSaleChange={setSale}
+          onItemsChanged={reloadItems}
+        />
       </Card>
 
       {/* share + qr */}

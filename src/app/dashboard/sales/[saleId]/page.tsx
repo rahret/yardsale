@@ -36,6 +36,20 @@ export default async function SaleAdminPage({ params }: { params: { saleId: stri
     .eq("id", sale.owner_id)
     .maybeSingle();
 
+  // the seller's own payout status (RLS: owners can read their billing row)
+  const { data: billing } = await supabase
+    .from("account_billing")
+    .select("connect_charges_enabled")
+    .eq("user_id", sale.owner_id)
+    .maybeSingle();
+
+  const { data: orders } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("sale_id", sale.id)
+    .in("status", ["paid", "picked_up", "refunded", "conflict"])
+    .order("created_at", { ascending: false });
+
   return (
     <SaleAdmin
       sale={sale}
@@ -43,6 +57,8 @@ export default async function SaleAdminPage({ params }: { params: { saleId: stri
       initialSavedLocations={savedLocations || []}
       initialSaleDays={saleDays || []}
       profilePaymentOptions={profile?.payment_options}
+      payoutsReady={!!billing?.connect_charges_enabled}
+      initialOrders={orders || []}
     />
   );
 }

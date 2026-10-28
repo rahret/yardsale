@@ -351,6 +351,34 @@ function DetailSheet({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [photoIdx, setPhotoIdx] = useState(0);
+  const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState("");
+  const canBuyNow =
+    sale.buy_now_enabled &&
+    !isBulkItem(item) &&
+    Number(item.price) > 0 &&
+    Number(item.price) >= Number(sale.buy_now_min_price);
+
+  async function buyNow() {
+    setBuyError("");
+    setBuying(true);
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: item.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.url) {
+        window.location.href = data.url; // Stripe Checkout
+        return;
+      }
+      setBuyError(data.error || "Couldn't start checkout — try again.");
+    } catch {
+      setBuyError("Couldn't reach the server — check your connection.");
+    }
+    setBuying(false);
+  }
   const supabase = useMemo(() => createClient(), []);
   const touchStartX = useRef<number | null>(null);
 
@@ -515,6 +543,27 @@ function DetailSheet({
           </div>
         ) : (
           <>
+            {canBuyNow && (
+              <div className="mt-3">
+                <button
+                  onClick={buyNow}
+                  disabled={buying}
+                  className="w-full bg-ink text-chalk font-bold py-3 rounded-lg shadow-tag disabled:opacity-60"
+                >
+                  {buying ? "Opening checkout…" : `Buy now · ${money(item.price)}`}
+                </button>
+                <div className="text-xs opacity-60 text-center mt-1.5">
+                  Card, Apple Pay, Google Pay or Cash App Pay. It&apos;s yours right away — pick it up at the sale
+                  with your code.
+                </div>
+                {buyError && <div className="text-marker text-sm font-semibold mt-2 text-center">{buyError}</div>}
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide font-bold opacity-50 mt-4">
+                  <div className="flex-1 h-px bg-ink/30" />
+                  or hold it and pay in person
+                  <div className="flex-1 h-px bg-ink/30" />
+                </div>
+              </div>
+            )}
             <div className="mt-3">
               <label className="block text-xs font-bold opacity-70 mb-1">Your name</label>
               <input
