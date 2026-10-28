@@ -78,6 +78,8 @@ export interface Item {
   quantity_available: number;
   /** Seller-picked highlight for the top of the sale page. */
   featured: boolean;
+  /** How buyers get it: hold and pay in person, or Buy Now online. Never both. */
+  sell_mode: SellMode;
   revenue: number;
   created_at: string;
   updated_at: string;
@@ -85,6 +87,8 @@ export interface Item {
   /** Who is holding this item — only returned to the sale's owner. */
   item_holds?: ItemHold | null;
 }
+
+export type SellMode = "hold" | "buy_now";
 
 export const PAYMENT_METHODS = ["cash", "card", "venmo", "cashapp", "paypal", "zelle"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -119,4 +123,26 @@ export interface AccountBilling {
   connect_charges_enabled: boolean;
   connect_payouts_enabled: boolean;
   updated_at: string;
+}
+
+export type OrderStatus = "pending" | "paid" | "conflict" | "refunded" | "picked_up" | "expired";
+
+/** An online "Buy Now" purchase. */
+export interface Order {
+  id: string;
+  sale_id: string;
+  item_id: string | null;
+  item_name: string;
+  amount_cents: number;
+  fee_cents: number;
+  status: OrderStatus;
+  pickup_code: string;
+  buyer_name: string | null;
+  buyer_email: string | null;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  created_at: string;
+  paid_at: string | null;
+  picked_up_at: string | null;
+  refunded_at: string | null;
 }

@@ -17,6 +17,7 @@ import {
 import { photoUrl } from "@/components/PhotoUploader";
 import ShareButton from "@/components/ShareButton";
 import SaleSummary from "@/components/SaleSummary";
+import { canBuyOnline } from "@/lib/fees";
 import { saleLink, siteOriginForClient } from "@/lib/share";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
@@ -328,6 +329,9 @@ function StatusPill({ item }: { item: Item }) {
       <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber/20 text-amber">● Reserved</div>
     );
   }
+  if (item.sell_mode === "buy_now") {
+    return <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-ink text-chalk">💳 Buy now</div>;
+  }
   return (
     <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-grass/20 text-grass-dark">
       ● Available
@@ -351,6 +355,31 @@ function DetailSheet({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [photoIdx, setPhotoIdx] = useState(0);
+  const [buying, setBuying] = useState(false);
+  const [buyError, setBuyError] = useState("");
+  const isBuyNow = item.sell_mode === "buy_now";
+  const canBuyNow = isBuyNow && canBuyOnline(item);
+
+  async function buyNow() {
+    setBuyError("");
+    setBuying(true);
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: item.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.url) {
+        window.location.href = data.url; // Stripe Checkout
+        return;
+      }
+      setBuyError(data.error || "Couldn't start checkout — try again.");
+    } catch {
+      setBuyError("Couldn't reach the server — check your connection.");
+    }
+    setBuying(false);
+  }
   const supabase = useMemo(() => createClient(), []);
   const touchStartX = useRef<number | null>(null);
 
@@ -515,37 +544,61 @@ function DetailSheet({
           </div>
         ) : (
           <>
-            <div className="mt-3">
-              <label className="block text-xs font-bold opacity-70 mb-1">Your name</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Jamie"
-                className="w-full px-3 py-2.5 border-2 border-cardboard-dark rounded-lg bg-white"
-              />
-            </div>
-            <div className="mt-2.5">
-              <label className="block text-xs font-bold opacity-70 mb-1">Phone number</label>
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="(555) 123-4567"
-                type="tel"
-                className="w-full px-3 py-2.5 border-2 border-cardboard-dark rounded-lg bg-white"
-              />
-            </div>
-            <button
-              onClick={reserve}
-              disabled={loading}
-              className="w-full bg-grass text-white font-bold py-3 rounded-lg shadow-tag mt-3.5 disabled:opacity-60"
-            >
-              {loading ? "Holding…" : `Hold for ${item.reservation_minutes ?? sale.default_reservation_minutes} min`}
-            </button>
-            {error && <div className="text-marker text-sm font-semibold mt-2">{error}</div>}
-            <div className="text-xs opacity-60 text-center mt-2">
-              Show your name at pickup — we&apos;ll only use your number if we need to reach you. You can only
-              hold one item per sale, so make it count!
-            </div>
+            {/* each item is either Buy Now or Hold, never both */}
+            {isBuyNow ? (
+              <div className="mt-3">
+                {canBuyNow ? (
+                  <button
+                    onClick={buyNow}
+                    disabled={buying}
+                    className="w-full bg-ink text-chalk font-bold py-3 rounded-lg shadow-tag disabled:opacity-60"
+                  >
+                    {buying ? "Opening checkout…" : `Buy now · ${money(item.price)}`}
+                  </button>
+                ) : (
+                  <div className="text-sm text-center opacity-70">Ask the seller about this one at the sale.</div>
+                )}
+                <div className="text-xs opacity-60 text-center mt-1.5">
+                  Card, Apple Pay, Google Pay or Cash App Pay. It&apos;s yours right away — pick it up at the sale
+                  with your code.
+                </div>
+                {buyError && <div className="text-marker text-sm font-semibold mt-2 text-center">{buyError}</div>}
+              </div>
+            ) : (
+              <>
+                <div className="mt-3">
+                  <label className="block text-xs font-bold opacity-70 mb-1">Your name</label>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Jamie"
+                    className="w-full px-3 py-2.5 border-2 border-cardboard-dark rounded-lg bg-white"
+                  />
+                </div>
+                <div className="mt-2.5">
+                  <label className="block text-xs font-bold opacity-70 mb-1">Phone number</label>
+                  <input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(555) 123-4567"
+                    type="tel"
+                    className="w-full px-3 py-2.5 border-2 border-cardboard-dark rounded-lg bg-white"
+                  />
+                </div>
+                <button
+                  onClick={reserve}
+                  disabled={loading}
+                  className="w-full bg-grass text-white font-bold py-3 rounded-lg shadow-tag mt-3.5 disabled:opacity-60"
+                >
+                  {loading ? "Holding…" : `Hold for ${item.reservation_minutes ?? sale.default_reservation_minutes} min`}
+                </button>
+                {error && <div className="text-marker text-sm font-semibold mt-2">{error}</div>}
+                <div className="text-xs opacity-60 text-center mt-2">
+                  Show your name at pickup — we&apos;ll only use your number if we need to reach you. You can only
+                  hold one item per sale, so make it count!
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

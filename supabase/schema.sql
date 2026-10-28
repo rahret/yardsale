@@ -148,6 +148,12 @@ alter table public.sales add column if not exists accepted_payments text[] not n
 alter table public.sales drop constraint if exists sales_accepted_payments_check;
 alter table public.sales add constraint sales_accepted_payments_check
   check (accepted_payments <@ array['cash', 'card', 'venmo', 'cashapp', 'paypal', 'zelle']::text[]);
+
+-- a sale-wide "Buy Now" switch was tried; Buy Now is now chosen per item
+-- (items.sell_mode)
+alter table public.sales drop column if exists buy_now_enabled;
+-- a per-sale minimum price for Buy Now was tried and dropped
+alter table public.sales drop column if exists buy_now_min_price;
 alter table public.sales drop column if exists address;
 
 -- starts_at/ends_at (a single date range) were replaced by the sale_days
@@ -309,6 +315,14 @@ alter table public.items add column if not exists quantity_available int not nul
 
 -- seller-picked highlights shown at the top of the sale page (up to 3 are shown)
 alter table public.items add column if not exists featured boolean not null default false;
+
+-- how buyers get a single item: 'hold' (reserve, pay in person) or 'buy_now'
+-- (pay online through Stripe, pick up with a code) — never both. Bulk items
+-- are first come, first served in person, so they're always 'hold'.
+alter table public.items add column if not exists sell_mode text not null default 'hold';
+alter table public.items drop constraint if exists items_sell_mode_check;
+alter table public.items add constraint items_sell_mode_check
+  check (sell_mode in ('hold', 'buy_now') and (sell_mode = 'hold' or quantity_total = 1));
 
 -- revenue: actual $ collected for this item so far, tracked separately from
 -- `price` (the list price) because a seller may negotiate a different sale
@@ -585,6 +599,105 @@ $$;
 grant execute on function public.sale_visit_counts(uuid) to authenticated;
 
 -- ----------------------------------------------------------------------------
+-- orders: online "Buy Now" purchases paid through Stripe Checkout. Created
+-- (pending) and updated only by the server with the service-role key — the
+-- Stripe webhook marks them paid. Sellers can read orders for their own sales;
+-- buyers see theirs through the server (they have no account).
+-- ----------------------------------------------------------------------------
+create table if not exists public.orders (
+  id uuid primary key default gen_random_uuid(),
+  sale_id uuid not null references public.sales (id) on delete cascade,
+  item_id uuid references public.items (id) on delete set null,
+  item_name text not null,
+  amount_cents int not null check (amount_cents > 0),
+  fee_cents int not null default 0 check (fee_cents >= 0),
+  -- pending: checkout started · paid: money in, item sold · conflict: paid but
+  -- the item was already gone, so it must be refunded · refunded · picked_up
+  status text not null default 'pending'
+    check (status in ('pending', 'paid', 'conflict', 'refunded', 'picked_up', 'expired')),
+  pickup_code text not null,
+  buyer_name text,
+  buyer_email text,
+  stripe_checkout_session_id text unique,
+  stripe_payment_intent_id text,
+  created_at timestamptz not null default now(),
+  paid_at timestamptz,
+  picked_up_at timestamptz,
+  refunded_at timestamptz
+);
+
+create index if not exists orders_sale_id_idx on public.orders (sale_id, created_at);
+
+alter table public.orders enable row level security;
+
+drop policy if exists "Owners can view orders for their own sales" on public.orders;
+create policy "Owners can view orders for their own sales"
+  on public.orders for select
+  using (exists (select 1 from public.sales s where s.id = orders.sale_id and s.owner_id = auth.uid()));
+
+-- Called by the Stripe webhook (service role only) when a checkout is paid.
+-- Atomically sells the item if it's still available — or still held but the
+-- hold has expired — otherwise flags the order as a conflict so the server
+-- refunds it. Safe to call twice for the same order (Stripe retries).
+create or replace function public.complete_order(
+  p_order_id uuid,
+  p_payment_intent text,
+  p_buyer_email text,
+  p_buyer_name text
+)
+returns text
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_order public.orders%rowtype;
+  v_item public.items%rowtype;
+  v_sale public.sales%rowtype;
+  v_minutes int;
+begin
+  select * into v_order from public.orders where id = p_order_id for update;
+  if not found then
+    return 'missing';
+  end if;
+  if v_order.status <> 'pending' then
+    return v_order.status; -- already handled
+  end if;
+
+  update public.orders
+  set stripe_payment_intent_id = p_payment_intent,
+      buyer_email = coalesce(p_buyer_email, buyer_email),
+      buyer_name = coalesce(nullif(trim(p_buyer_name), ''), buyer_name),
+      paid_at = now()
+  where id = p_order_id;
+
+  select * into v_item from public.items where id = v_order.item_id for update;
+  select * into v_sale from public.sales where id = v_order.sale_id;
+  if found and v_item.id is not null then
+    v_minutes := coalesce(v_item.reservation_minutes, v_sale.default_reservation_minutes);
+  end if;
+
+  if v_item.id is not null
+     and v_item.quantity_total = 1
+     and (v_item.status = 'available'
+          or (v_item.status = 'reserved' and v_item.reserved_at + make_interval(mins => v_minutes) < now())) then
+    update public.items
+    set status = 'sold',
+        sold_at = now(),
+        reserved_at = null,
+        revenue = revenue + v_order.amount_cents / 100.0
+    where id = v_item.id;
+    update public.orders set status = 'paid' where id = p_order_id;
+    return 'paid';
+  end if;
+
+  update public.orders set status = 'conflict' where id = p_order_id;
+  return 'conflict';
+end;
+$$;
+
+revoke all on function public.complete_order(uuid, text, text, text) from public, anon, authenticated;
+
+-- ----------------------------------------------------------------------------
 -- GRANTS: Row Level Security only restricts which *rows* a role can touch —
 -- the role still needs baseline table-level privileges before RLS is even
 -- evaluated. Some Supabase projects don't pre-grant these to anon/authenticated
@@ -598,6 +711,7 @@ grant select, update on public.profiles to anon, authenticated;
 grant select on public.account_billing to authenticated;
 grant select, delete on public.item_holds to authenticated;
 grant select on public.sale_visits to authenticated;
+grant select on public.orders to authenticated;
 grant select, insert, update, delete on public.sales to anon, authenticated;
 grant select, insert, update, delete on public.sale_days to anon, authenticated;
 grant select, insert, update, delete on public.items to anon, authenticated;
@@ -860,6 +974,9 @@ begin
 
   if v_item.quantity_total > 1 then
     return jsonb_build_object('success', false, 'error', 'This is a bulk item sold in person — it can''t be reserved.');
+  end if;
+  if v_item.sell_mode = 'buy_now' then
+    return jsonb_build_object('success', false, 'error', 'This item can''t be held — use Buy Now to pay for it online.');
   end if;
 
   select * into v_sale from public.sales where id = v_item.sale_id for update;

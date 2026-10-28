@@ -10,7 +10,7 @@ the sale is worth visiting.
 
 **Status key:** ✅ Done · 🟡 Partly done · ⬜ Not started
 
-_Last updated: 2026-10-27_
+_Last updated: 2026-10-28_
 
 ---
 
@@ -124,10 +124,19 @@ _Last updated: 2026-10-27_
     listing in "near me", seller stats, extra sign layouts).
 - 🟡 **Help sellers take payment.** Sellers can save how buyers pay them (cash, Venmo,
   Cash App, PayPal, Zelle) on the Account page.
-  - _Done (pending merge):_ each sale shows which methods it accepts, as icons only. Handles
-    stay private.
-  - _To do:_ card / Apple Pay / Google Pay via Stripe Connect (Express) — onboarding,
-    payouts, webhook; `account_billing` already has the Connect columns.
+  - _Done (#16):_ each sale shows which methods it accepts, as icons only. Handles stay
+    private.
+  - _Done (pending merge):_ **Buy Now** through Stripe — card, Apple Pay, Google Pay and
+    Cash App Pay. Sellers connect payouts (Stripe Express) on the Account page, then choose
+    **Buy Now or Hold for each item** (never both; bulk and sub-50¢ items are Hold). Buyers pay,
+    get a pickup code, and the item is marked sold. Sellers mark orders picked up or refund
+    them.
+  - _Decided against (for now):_ Venmo through PayPal (separate integration), and
+    "pay the seller directly" links (can't confirm payment; exposes handles).
+  - _Still to decide:_ platform fee (default 0% on top of Stripe's fee), no-show policy
+    (default: seller keeps payment and can refund by hand), legal/tax review before launch.
+- ⬜ **Email notifications.** Purchase and hold alerts to sellers; Stripe's own receipt
+  covers buyers for now. Needs an email service (e.g. Resend).
 
 ## 6. Other ideas & follow-ups
 
@@ -146,5 +155,5 @@ _Last updated: 2026-10-27_
 | #13 | Buyer privacy fix, reservation abuse limits, forgot/reset password, password rules, logout 405 fix, lint/tests/CI |
 | #14 | Link previews, share tools, item links, visit counts by source, `https://` fix for the site URL |
 | #15 | Upright photos and no past dates in link previews |
-| _pending_ | Buyer page Share button fix (tilted title was covering it) |
-| _pending_ | Buyer-page upgrade: open status, seller's note, what's here + highlights, payment icons & details, add to calendar |
+| #16 | Buyer page Share button fix; buyer-page upgrade (open status, seller's note, what's here + highlights, payment icons, add to calendar); this roadmap |
+| _pending_ | Buy Now with Stripe (card, Apple Pay, Google Pay, Cash App Pay), seller payouts, online orders with pickup codes and refunds |

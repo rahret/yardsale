@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
-import { PAYMENT_METHODS, type Item, type Sale, type SaleDay, type SaleStatus, type SavedLocation } from "@/lib/types";
+import { PAYMENT_METHODS, type Item, type Order, type SellMode, type Sale, type SaleDay, type SaleStatus, type SavedLocation } from "@/lib/types";
 import { PAYMENT_LABELS, paymentMethodsFromProfile } from "@/lib/saleInfo";
 import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import FitText from "@/components/FitText";
 import ShareSaleCard from "@/components/ShareSaleCard";
+import BuyNowCard from "@/components/BuyNowCard";
+import { MIN_CHARGE_CENTS, toCents } from "@/lib/fees";
 
 const MAX_SALE_DAYS = 7;
 const MAX_FEATURED = 3;
@@ -49,6 +51,7 @@ const emptyForm = {
   icon: "📦",
   isBulk: false,
   quantity: "",
+  sellMode: "hold" as SellMode,
 };
 
 export default function SaleAdmin({
@@ -57,6 +60,8 @@ export default function SaleAdmin({
   initialSavedLocations,
   initialSaleDays,
   profilePaymentOptions,
+  payoutsReady = false,
+  initialOrders = [],
 }: {
   sale: Sale;
   initialItems: Item[];
@@ -64,6 +69,9 @@ export default function SaleAdmin({
   initialSaleDays: SaleDay[];
   /** Payment options from the seller's Account page, used to pre-tick methods. */
   profilePaymentOptions?: Record<string, unknown> | null;
+  /** The seller's Stripe account can take payments. */
+  payoutsReady?: boolean;
+  initialOrders?: Order[];
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
@@ -71,6 +79,7 @@ export default function SaleAdmin({
   const [addError, setAddError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
+  const [editError, setEditError] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [photosOpenId, setPhotosOpenId] = useState<string | null>(null);
   const [saleModal, setSaleModal] = useState<{ item: Item; mode: "sell" | "restock" } | null>(null);
@@ -284,6 +293,12 @@ export default function SaleAdmin({
     e.preventDefault();
     if (!form.name.trim()) return;
     setAddError("");
+    const sellMode: SellMode = form.isBulk ? "hold" : form.sellMode;
+    const modeError = sellModeError(sellMode, form.price, payoutsReady);
+    if (modeError) {
+      setAddError(modeError);
+      return;
+    }
     const supabase = createClient();
     const quantityTotal = form.isBulk ? Math.max(2, Number(form.quantity) || 2) : 1;
     const { data, error } = await supabase
@@ -294,10 +309,11 @@ export default function SaleAdmin({
         price: Number(form.price) || 0,
         category: form.category.trim() || "Misc",
         description: form.description.trim(),
-        reservation_minutes: form.isBulk ? null : form.reservationMinutes ? Number(form.reservationMinutes) : null,
+        reservation_minutes: sellMode === "hold" && !form.isBulk && form.reservationMinutes ? Number(form.reservationMinutes) : null,
         icon: form.icon || "📦",
         quantity_total: quantityTotal,
         quantity_available: quantityTotal,
+        sell_mode: sellMode,
       })
       .select(ITEM_SELECT)
       .single();
@@ -306,10 +322,12 @@ export default function SaleAdmin({
       return;
     }
     setItems((prev) => [data, ...prev]);
-    setForm(emptyForm);
+    // keep the Buy Now / Hold choice for the next item
+    setForm({ ...emptyForm, sellMode: form.sellMode });
   }
 
   function startEdit(item: Item) {
+    setEditError("");
     setEditingId(item.id);
     const bulk = isBulkItem(item);
     setEditForm({
@@ -321,6 +339,7 @@ export default function SaleAdmin({
       icon: item.icon,
       status: item.status === "low_stock" ? "available" : item.status,
       isBulk: bulk,
+      sellMode: item.sell_mode ?? "hold",
       quantityTotal: String(bulk ? item.quantity_total : 2),
       quantityAvailable: String(item.quantity_available),
     });
@@ -329,6 +348,13 @@ export default function SaleAdmin({
   async function saveEdit(id: string) {
     const supabase = createClient();
     const isBulk = editForm.isBulk;
+    const sellMode: SellMode = isBulk ? "hold" : editForm.sellMode;
+    const modeError = sellModeError(sellMode, editForm.price, payoutsReady, items.find((i) => i.id === id)?.sell_mode);
+    if (modeError) {
+      setEditError(modeError);
+      return;
+    }
+    setEditError("");
     const quantityTotal = isBulk ? Math.max(2, Number(editForm.quantityTotal) || 2) : 1;
     const quantityAvailable = isBulk
       ? Math.min(quantityTotal, Math.max(0, Number(editForm.quantityAvailable) || 0))
@@ -338,7 +364,8 @@ export default function SaleAdmin({
       price: Number(editForm.price) || 0,
       category: editForm.category.trim() || "Misc",
       description: editForm.description,
-      reservation_minutes: isBulk ? null : editForm.reservationMinutes ? Number(editForm.reservationMinutes) : null,
+      reservation_minutes: isBulk || sellMode !== "hold" ? null : editForm.reservationMinutes ? Number(editForm.reservationMinutes) : null,
+      sell_mode: sellMode,
       icon: editForm.icon || "📦",
       quantity_total: quantityTotal,
       quantity_available: quantityAvailable,
@@ -350,10 +377,12 @@ export default function SaleAdmin({
       .eq("id", id)
       .select(ITEM_SELECT)
       .single();
-    if (!error && data) {
-      setItems((prev) => prev.map((i) => (i.id === id ? data : i)));
-      setEditingId(null);
+    if (error || !data) {
+      setEditError(error?.message || "Couldn't save — try again.");
+      return;
     }
+    setItems((prev) => prev.map((i) => (i.id === id ? data : i)));
+    setEditingId(null);
   }
 
   async function confirmSaleModal(price: number, qty: number) {
@@ -420,6 +449,15 @@ export default function SaleAdmin({
       setItems((prev) => prev.filter((i) => i.id !== id));
       setConfirmDeleteId(null);
     }
+  }
+
+  async function reloadItems() {
+    const { data } = await createClient()
+      .from("items")
+      .select(ITEM_SELECT)
+      .eq("sale_id", sale.id)
+      .order("created_at", { ascending: false });
+    if (data) setItems(data);
   }
 
   async function saveNote() {
@@ -523,6 +561,17 @@ export default function SaleAdmin({
             {note.length}/{NOTE_MAX}
           </span>
         </div>
+      </Card>
+
+      {/* online payments */}
+      <Card title="💳 Buy Now (online payments)">
+        <BuyNowCard
+          sale={sale}
+          payoutsReady={payoutsReady}
+          initialOrders={initialOrders}
+          hasBuyNowItems={items.some((i) => i.sell_mode === "buy_now")}
+          onItemsChanged={reloadItems}
+        />
       </Card>
 
       {/* share + qr */}
@@ -828,7 +877,7 @@ export default function SaleAdmin({
                   className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
                 />
               </Field>
-            ) : (
+            ) : form.sellMode === "buy_now" ? null : (
               <Field label="Reservation minutes (optional)">
                 <input
                   type="number"
@@ -856,6 +905,14 @@ export default function SaleAdmin({
               Buyers see it&apos;s available (and when it&apos;s running low) but can&apos;t reserve it — bulk items
               are first come, first served.
             </div>
+          )}
+          {!form.isBulk && (
+            <SellModePicker
+              value={form.sellMode}
+              onChange={(sellMode) => setForm({ ...form, sellMode })}
+              payoutsReady={payoutsReady}
+              price={form.price}
+            />
           )}
           <Field label="Description (optional)">
             <textarea
@@ -885,6 +942,7 @@ export default function SaleAdmin({
                   <div className="font-bold text-sm">{item.name}</div>
                   <div className="text-xs opacity-60">
                     {money(item.price)} · {item.category} · <StatusBadge status={item.status} />
+                    {!isBulkItem(item) && <> · {item.sell_mode === "buy_now" ? "💳 Buy Now" : "✋ Hold"}</>}
                     {item.status === "reserved" && item.item_holds && (
                       <>
                         {" "}
@@ -983,7 +1041,7 @@ export default function SaleAdmin({
                         className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
                       />
                     </Field>
-                    {!editForm.isBulk && (
+                    {!editForm.isBulk && editForm.sellMode === "hold" && (
                       <Field label="Reservation minutes">
                         <input
                           type="number"
@@ -1017,6 +1075,15 @@ export default function SaleAdmin({
                     />
                     Bulk lot (multiple identical items)
                   </label>
+                  {!editForm.isBulk && (
+                    <SellModePicker
+                      value={editForm.sellMode}
+                      onChange={(sellMode) => setEditForm({ ...editForm, sellMode })}
+                      payoutsReady={payoutsReady}
+                      price={editForm.price}
+                      currentMode={item.sell_mode}
+                    />
+                  )}
                   {editForm.isBulk ? (
                     <div className="grid grid-cols-2 gap-2">
                       <Field label="Starting quantity">
@@ -1051,6 +1118,7 @@ export default function SaleAdmin({
                       </select>
                     </Field>
                   )}
+                  {editError && <div className="text-marker text-sm font-semibold mb-2">{editError}</div>}
                   <button
                     onClick={() => saveEdit(item.id)}
                     className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm"
@@ -1114,6 +1182,78 @@ export default function SaleAdmin({
           </div>,
           printRoot
         )}
+    </div>
+  );
+}
+
+/** Why an item can't be set to Buy Now, or "" if it can. An item that is
+ * already Buy Now can keep it (so editing other fields never fails). */
+function sellModeError(mode: SellMode, price: string, payoutsReady: boolean, currentMode?: SellMode): string {
+  if (mode !== "buy_now") return "";
+  if (!payoutsReady && currentMode !== "buy_now") return "Set up payouts on your Account page to use Buy Now.";
+  if (toCents(Number(price) || 0) < MIN_CHARGE_CENTS) {
+    return `Buy Now needs a price of at least ${money(MIN_CHARGE_CENTS / 100)} — use Hold for cheaper items.`;
+  }
+  return "";
+}
+
+/** "How buyers get it": Hold (reserve, pay in person) or Buy Now (pay
+ * online). An item is one or the other, never both. */
+function SellModePicker({
+  value,
+  onChange,
+  payoutsReady,
+  price,
+  currentMode,
+}: {
+  value: SellMode;
+  onChange: (mode: SellMode) => void;
+  payoutsReady: boolean;
+  price: string;
+  currentMode?: SellMode;
+}) {
+  const buyNowBlocked = !payoutsReady && currentMode !== "buy_now";
+  const tooCheap = price !== "" && toCents(Number(price) || 0) < MIN_CHARGE_CENTS;
+  const option = (mode: SellMode, title: string, hint: string, disabled = false) => (
+    <label
+      className={`flex-1 min-w-[150px] flex items-start gap-2 border-2 rounded-lg px-3 py-2 cursor-pointer ${
+        value === mode ? "border-ink bg-chalk" : "border-cardboard-dark/50 bg-white"
+      } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      <input
+        type="radio"
+        className="mt-1"
+        checked={value === mode}
+        disabled={disabled}
+        onChange={() => onChange(mode)}
+      />
+      <span>
+        <span className="block text-sm font-bold">{title}</span>
+        <span className="block text-[11px] opacity-60">{hint}</span>
+      </span>
+    </label>
+  );
+  return (
+    <div className="mb-2.5">
+      <div className="text-xs font-bold opacity-70 mb-1">How buyers get it</div>
+      <div className="flex gap-2 flex-wrap">
+        {option("hold", "✋ Hold", "Buyer reserves it, pays you in person")}
+        {option("buy_now", "💳 Buy Now", "Buyer pays online, picks up with a code", buyNowBlocked)}
+      </div>
+      {buyNowBlocked && (
+        <div className="text-[11px] opacity-60 mt-1">
+          To use Buy Now,{" "}
+          <a href="/dashboard/account" className="underline">
+            set up payouts on your Account page
+          </a>
+          .
+        </div>
+      )}
+      {value === "buy_now" && tooCheap && (
+        <div className="text-[11px] text-marker font-semibold mt-1">
+          Buy Now needs a price of at least {money(MIN_CHARGE_CENTS / 100)}.
+        </div>
+      )}
     </div>
   );
 }

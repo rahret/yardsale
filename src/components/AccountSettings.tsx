@@ -23,6 +23,7 @@ export default function AccountSettings({
   fallbackDisplayName,
   billing,
   saleCount,
+  stripeNotice,
 }: {
   email: string;
   pendingEmail: string;
@@ -31,6 +32,8 @@ export default function AccountSettings({
   fallbackDisplayName: string;
   billing: AccountBilling | null;
   saleCount: number;
+  /** ?stripe=… after returning from Stripe onboarding. */
+  stripeNotice?: string;
 }) {
   return (
     <div className="p-5">
@@ -44,7 +47,7 @@ export default function AccountSettings({
       <ProfileSection initialProfile={initialProfile} fallbackDisplayName={fallbackDisplayName} />
       <SecuritySection email={email} pendingEmail={pendingEmail} memberSince={memberSince} />
       <PlanSection billing={billing} saleCount={saleCount} />
-      <GettingPaidSection initialProfile={initialProfile} billing={billing} />
+      <GettingPaidSection initialProfile={initialProfile} billing={billing} stripeNotice={stripeNotice} />
       <DangerZone email={email} />
     </div>
   );
@@ -241,12 +244,20 @@ function PlanSection({ billing, saleCount }: { billing: AccountBilling | null; s
   );
 }
 
+const STRIPE_NOTICES: Record<string, string> = {
+  returned: "Stripe setup complete — you can turn on Buy Now in each sale's settings.",
+  unavailable: "Online payments aren't switched on for this site yet.",
+  error: "Something went wrong talking to Stripe — please try again.",
+};
+
 function GettingPaidSection({
   initialProfile,
   billing,
+  stripeNotice,
 }: {
   initialProfile: Profile | null;
   billing: AccountBilling | null;
+  stripeNotice?: string;
 }) {
   const [options, setOptions] = useState<PaymentOptions>(initialProfile?.payment_options || { cash: true });
   const [status, setStatus] = useState<Status>(null);
@@ -301,9 +312,10 @@ function GettingPaidSection({
 
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex-1 min-w-[200px]">
-          <div className="font-bold text-sm">Card, Apple Pay &amp; Google Pay</div>
+          <div className="font-bold text-sm">Buy Now: card, Apple Pay, Google Pay &amp; Cash App Pay</div>
           <p className="text-xs opacity-70 mt-1">
-            Accept cards and mobile wallets through Stripe, with payouts straight to your bank account.
+            Let buyers pay online through Stripe, with payouts straight to your bank account. Turn on Buy Now
+            for each sale in its settings.
           </p>
           <div className="text-xs font-semibold mt-1.5">
             {cardsReady ? (
@@ -315,8 +327,31 @@ function GettingPaidSection({
             )}
           </div>
         </div>
-        <ComingSoonButton label={connected ? "Finish Stripe setup" : "Set up with Stripe"} />
+        {cardsReady ? (
+          <form action="/api/stripe/dashboard" method="post">
+            <button type="submit" className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm">
+              View payouts
+            </button>
+          </form>
+        ) : (
+          <form action="/api/stripe/connect" method="post">
+            <button type="submit" className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm">
+              {connected ? "Finish Stripe setup" : "Set up with Stripe"}
+            </button>
+          </form>
+        )}
       </div>
+      {stripeNotice && STRIPE_NOTICES[stripeNotice] && (
+        <div
+          className={`text-xs font-semibold mt-2 ${
+            stripeNotice === "returned" ? "text-grass-dark" : "text-marker"
+          }`}
+        >
+          {stripeNotice === "returned" && !cardsReady
+            ? "Thanks! Stripe may need a few minutes — or a bit more info — before you can take payments."
+            : STRIPE_NOTICES[stripeNotice]}
+        </div>
+      )}
     </Card>
   );
 }
