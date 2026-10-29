@@ -24,6 +24,7 @@ export default function AccountSettings({
   billing,
   saleCount,
   stripeNotice,
+  stripeDetail,
 }: {
   email: string;
   pendingEmail: string;
@@ -34,6 +35,8 @@ export default function AccountSettings({
   saleCount: number;
   /** ?stripe=… after returning from Stripe onboarding. */
   stripeNotice?: string;
+  /** Stripe's own explanation when setup failed. */
+  stripeDetail?: string;
 }) {
   return (
     <div className="p-5">
@@ -47,7 +50,12 @@ export default function AccountSettings({
       <ProfileSection initialProfile={initialProfile} fallbackDisplayName={fallbackDisplayName} />
       <SecuritySection email={email} pendingEmail={pendingEmail} memberSince={memberSince} />
       <PlanSection billing={billing} saleCount={saleCount} />
-      <GettingPaidSection initialProfile={initialProfile} billing={billing} stripeNotice={stripeNotice} />
+      <GettingPaidSection
+        initialProfile={initialProfile}
+        billing={billing}
+        stripeNotice={stripeNotice}
+        stripeDetail={stripeDetail}
+      />
       <DangerZone email={email} />
     </div>
   );
@@ -254,10 +262,12 @@ function GettingPaidSection({
   initialProfile,
   billing,
   stripeNotice,
+  stripeDetail,
 }: {
   initialProfile: Profile | null;
   billing: AccountBilling | null;
   stripeNotice?: string;
+  stripeDetail?: string;
 }) {
   const [options, setOptions] = useState<PaymentOptions>(initialProfile?.payment_options || { cash: true });
   const [status, setStatus] = useState<Status>(null);
@@ -350,6 +360,9 @@ function GettingPaidSection({
           {stripeNotice === "returned" && !cardsReady
             ? "Thanks! Stripe may need a few minutes — or a bit more info — before you can take payments."
             : STRIPE_NOTICES[stripeNotice]}
+          {stripeNotice === "error" && stripeDetail && (
+            <span className="block font-normal mt-0.5">Stripe said: &ldquo;{stripeDetail}&rdquo;</span>
+          )}
         </div>
       )}
     </Card>
