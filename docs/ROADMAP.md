@@ -28,11 +28,11 @@ _Last updated: 2026-10-28_
   category ("furniture within 5 miles, Saturday"). That needs map coordinates for each sale,
   which the database doesn't store yet. It's also your strongest reason for buyers to come
   back, and a natural paid feature: promote a sale to the top of the list.
-  - _Done (pending merge):_ new home page with **Find yard sales near you** — search by ZIP,
-    city or street, filter by Today / This weekend / Next 7 days and category, cards with
-    photos, open status, street (no house number) and top categories. Sellers opt in with
-    "List my sale" (existing sales start unlisted; new sales start listed). Sellers get Log in /
-    Get started at the top and a "Having a yard sale?" section.
+  - _Done (pending merge):_ new front page (name, short description, big **Buyers** and
+    **New Sellers** buttons). **Buyers → `/find`:** search by ZIP, city or street, filter by
+    Today / This weekend / Next 7 days and category; cards with photos, open status, street
+    (no house number) and top categories. **New Sellers → `/sell`:** benefits and Get started.
+    Sellers opt in with "List my sale" (existing sales start unlisted; new sales start listed).
   - _Still to do:_ map coordinates for each sale (geocoding) so buyers can search "within
     N miles" and use their location; a map view; paging when there are many sales;
     promoted listings (paid).
