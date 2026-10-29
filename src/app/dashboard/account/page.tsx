@@ -3,7 +3,11 @@ import AccountSettings from "@/components/AccountSettings";
 
 export const dynamic = "force-dynamic";
 
-export default async function AccountPage({ searchParams }: { searchParams: { stripe?: string } }) {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: { stripe?: string; detail?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
@@ -33,6 +37,7 @@ export default async function AccountPage({ searchParams }: { searchParams: { st
       billing={billing}
       saleCount={saleCount || 0}
       stripeNotice={searchParams.stripe}
+      stripeDetail={searchParams.detail}
     />
   );
 }
