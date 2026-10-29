@@ -129,4 +129,11 @@ end;
 $$;
 reset role;
 
+-- new sales are listed in the directory by default
+do $$
+begin
+  assert (select listed from public.sales where id = 'c0000000-0000-0000-0000-000000000001'), 'new sales start listed';
+end;
+$$;
+
 \echo 'orders.test.sql: all checks passed'

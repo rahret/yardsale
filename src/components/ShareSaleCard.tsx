@@ -58,6 +58,13 @@ export default function ShareSaleCard({
     }
   }
 
+  async function toggleListed(listed: boolean) {
+    setSavingAddress(true);
+    const { data, error } = await createClient().from("sales").update({ listed }).eq("id", sale.id).select().single();
+    setSavingAddress(false);
+    if (!error && data) onSaleChange(data);
+  }
+
   async function toggleFullAddress(show: boolean) {
     setSavingAddress(true);
     const { data, error } = await createClient()
@@ -158,6 +165,23 @@ export default function ShareSaleCard({
           </a>
         )}
       </div>
+
+      <label className="flex items-start gap-2 text-sm mb-3">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={sale.listed}
+          disabled={savingAddress}
+          onChange={(e) => toggleListed(e.target.checked)}
+        />
+        <span>
+          List my sale in <strong>Find yard sales</strong> on the home page
+          <span className="block text-xs opacity-60">
+            Buyers searching your area can find it while it&apos;s Live. Listings show the street name, not your house
+            number.
+          </span>
+        </span>
+      </label>
 
       <label className="flex items-start gap-2 text-sm mb-1">
         <input

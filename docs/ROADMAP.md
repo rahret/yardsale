@@ -23,11 +23,19 @@ _Last updated: 2026-10-28_
   - _Shipped in #14, fixed in #15:_ per-sale and per-item previews with a generated image
     (item photos, name, dates, street without house number), "Happening now" / "Sale ended"
     badge, Share button and ready-to-paste posts for sellers, downloadable square image.
-- ⬜ **Buyers can't find sales on their own.** You can only reach a sale through its link. A
+- 🟡 **Buyers can't find sales on their own.** You can only reach a sale through its link. A
   "sales near me this weekend" map or list would help, searchable by distance, date and
   category ("furniture within 5 miles, Saturday"). That needs map coordinates for each sale,
   which the database doesn't store yet. It's also your strongest reason for buyers to come
   back, and a natural paid feature: promote a sale to the top of the list.
+  - _Done (pending merge):_ new home page with **Find yard sales near you** — search by ZIP,
+    city or street, filter by Today / This weekend / Next 7 days and category, cards with
+    photos, open status, street (no house number) and top categories. Sellers opt in with
+    "List my sale" (existing sales start unlisted; new sales start listed). Sellers get Log in /
+    Get started at the top and a "Having a yard sale?" section.
+  - _Still to do:_ map coordinates for each sale (geocoding) so buyers can search "within
+    N miles" and use their location; a map view; paging when there are many sales;
+    promoted listings (paid).
 - ⬜ **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
   Add arrow signs ("← YARD SALE, 2 blocks") with a small QR code, plus a quarter-page flyer
   for neighborhood boards.
