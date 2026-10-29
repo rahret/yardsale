@@ -78,7 +78,7 @@ export interface Item {
   quantity_available: number;
   /** Seller-picked highlight for the top of the sale page. */
   featured: boolean;
-  /** How buyers get it: hold and pay in person, or Buy Now online. Never both. */
+  /** How buyers get it: first come in person, hold, or Buy Now — exactly one. */
   sell_mode: SellMode;
   revenue: number;
   created_at: string;
@@ -88,7 +88,9 @@ export interface Item {
   item_holds?: ItemHold | null;
 }
 
-export type SellMode = "hold" | "buy_now";
+/** How buyers get an item: first come, first served in person; hold and pay
+ * in person; or Buy Now online. Exactly one. */
+export type SellMode = "in_person" | "hold" | "buy_now";
 
 export const PAYMENT_METHODS = ["cash", "card", "venmo", "cashapp", "paypal", "zelle"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];

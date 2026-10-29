@@ -106,10 +106,12 @@ In Supabase → Authentication → URL Configuration, make sure your site's
 ## Buy Now (online payments with Stripe)
 
 Buyers can pay for an item online (card, Apple Pay, Google Pay, Cash App Pay) and pick it up
-with a 4-digit code. Each item is either **Buy Now** or **Hold** (reserve, pay in person) —
-never both; the seller picks when adding or editing the item (`items.sell_mode`). Bulk items
-and items under 50¢ (Stripe's minimum) are always Hold. The database refuses holds on Buy Now
-items, and checkout refuses Hold items. Money goes to the seller through
+with a 4-digit code. Each item has exactly one way to buy it, picked by the seller when adding
+or editing it (`items.sell_mode`): **First come, first served** (no holds or online payment;
+the default), **Hold** (reserve, pay in person) or **Buy Now** (pay online). Bulk items are
+always first come, first served, and Buy Now needs a price of at least 50¢ (Stripe's
+minimum). The database refuses holds on anything but Hold items, and checkout refuses
+anything but Buy Now items. Money goes to the seller through
 **Stripe Connect** (Express accounts, destination charges). The app keeps an application fee
 equal to Stripe's processing fee (which the platform pays on these charges) plus an optional
 platform cut.

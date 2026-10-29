@@ -94,12 +94,22 @@ begin
   assert (public.reserve_item('d0000000-0000-0000-0000-000000000009', 'Pat', '312-555-0177') ->> 'error') like '%use Buy Now%',
     'holds are refused on Buy Now items';
   assert (select status from public.items where id = 'd0000000-0000-0000-0000-000000000009') = 'available', 'still available';
+  -- bulk items are always first come, first served
+  insert into public.items (id, sale_id, name, price, sell_mode, quantity_total, quantity_available)
+  values ('d0000000-0000-0000-0000-00000000000b', 'c0000000-0000-0000-0000-000000000001', 'books', 1, 'buy_now', 20, 20);
+  assert (select sell_mode from public.items where id = 'd0000000-0000-0000-0000-00000000000b') = 'in_person',
+    'bulk items become first come, first served';
   begin
-    insert into public.items (sale_id, name, price, sell_mode, quantity_total, quantity_available)
-    values ('c0000000-0000-0000-0000-000000000001', 'books', 1, 'buy_now', 20, 20);
-    raise exception 'bulk items must not be Buy Now';
+    update public.items set sell_mode = 'hold' where id = 'd0000000-0000-0000-0000-00000000000b';
+    raise exception 'bulk items must not be held';
   exception when check_violation then null;
   end;
+
+  -- first come, first served items can't be held either
+  insert into public.items (id, sale_id, name, price, sell_mode) values
+    ('d0000000-0000-0000-0000-00000000000a', 'c0000000-0000-0000-0000-000000000001', 'rake', 5, 'in_person');
+  assert (public.reserve_item('d0000000-0000-0000-0000-00000000000a', 'Pat', '312-555-0178') ->> 'error') like '%first come, first served%',
+    'holds are refused on first-come items';
 end;
 $$;
 

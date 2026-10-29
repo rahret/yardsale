@@ -316,13 +316,16 @@ alter table public.items add column if not exists quantity_available int not nul
 -- seller-picked highlights shown at the top of the sale page (up to 3 are shown)
 alter table public.items add column if not exists featured boolean not null default false;
 
--- how buyers get a single item: 'hold' (reserve, pay in person) or 'buy_now'
--- (pay online through Stripe, pick up with a code) — never both. Bulk items
--- are first come, first served in person, so they're always 'hold'.
+-- how buyers get an item, exactly one of:
+--   'in_person' — first come, first served: no holds, no online payment
+--   'hold'      — buyer reserves it, pays in person
+--   'buy_now'   — buyer pays online through Stripe, picks up with a code
+-- Bulk items are always first come, first served.
 alter table public.items add column if not exists sell_mode text not null default 'hold';
 alter table public.items drop constraint if exists items_sell_mode_check;
+update public.items set sell_mode = 'in_person' where quantity_total > 1 and sell_mode <> 'in_person';
 alter table public.items add constraint items_sell_mode_check
-  check (sell_mode in ('hold', 'buy_now') and (sell_mode = 'hold' or quantity_total = 1));
+  check (sell_mode in ('in_person', 'hold', 'buy_now') and (sell_mode = 'in_person' or quantity_total = 1));
 
 -- revenue: actual $ collected for this item so far, tracked separately from
 -- `price` (the list price) because a seller may negotiate a different sale
@@ -764,8 +767,10 @@ begin
         new.status := 'available';
       end if;
     end if;
-    -- bulk items are never reservable, so they should never carry hold state
+    -- bulk items are never reservable, so they should never carry hold state;
+    -- they're always first come, first served
     new.reserved_at := null;
+    new.sell_mode := 'in_person';
   end if;
   return new;
 end;
@@ -977,6 +982,9 @@ begin
   end if;
   if v_item.sell_mode = 'buy_now' then
     return jsonb_build_object('success', false, 'error', 'This item can''t be held — use Buy Now to pay for it online.');
+  end if;
+  if v_item.sell_mode = 'in_person' then
+    return jsonb_build_object('success', false, 'error', 'This item is first come, first served — come by the sale to buy it.');
   end if;
 
   select * into v_sale from public.sales where id = v_item.sale_id for update;

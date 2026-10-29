@@ -520,14 +520,16 @@ function DetailSheet({
           <div className="bg-marker/10 border border-marker/30 rounded-lg p-3.5 text-center text-sm mt-3">
             This item has already sold.
           </div>
-        ) : isBulkItem(item) ? (
+        ) : isBulkItem(item) || item.sell_mode === "in_person" ? (
           <div
             className={`border rounded-lg p-3.5 text-center text-sm mt-3 ${
               item.status === "low_stock" ? "bg-amber/10 border-amber/30" : "bg-grass/10 border-grass/30"
             }`}
           >
             {item.status === "low_stock" && <div className="font-bold mb-1">Only a few left!</div>}
-            This is a bulk item sold in person — no reservations. Just come by and grab one while they last.
+            {isBulkItem(item)
+              ? "This is a bulk item sold in person — no reservations. Just come by and grab one while they last."
+              : "First come, first served — no holds or online payment. Come by the sale to buy it."}
           </div>
         ) : item.status === "reserved" ? (
           <>

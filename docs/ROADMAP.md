@@ -128,9 +128,9 @@ _Last updated: 2026-10-28_
     private.
   - _Done (pending merge):_ **Buy Now** through Stripe — card, Apple Pay, Google Pay and
     Cash App Pay. Sellers connect payouts (Stripe Express) on the Account page, then choose
-    **Buy Now or Hold for each item** (never both; bulk and sub-50¢ items are Hold). Buyers pay,
-    get a pickup code, and the item is marked sold. Sellers mark orders picked up or refund
-    them.
+    **how buyers get each item**: First come, first served (default), Hold, or Buy Now —
+    exactly one (bulk items are always first come; Buy Now needs 50¢+). Buyers pay, get a
+    pickup code, and the item is marked sold. Sellers mark orders picked up or refund them.
   - _Decided against (for now):_ Venmo through PayPal (separate integration), and
     "pay the seller directly" links (can't confirm payment; exposes handles).
   - _Still to decide:_ platform fee (default 0% on top of Stripe's fee), no-show policy
