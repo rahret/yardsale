@@ -1065,3 +1065,17 @@ create policy "Owners can delete photos for their own sales"
         and s.owner_id = auth.uid()
     )
   );
+
+-- ============================================================================
+-- SERVER ROLE: the app's server code (Stripe routes and webhook) connects with
+-- the service_role key to record payout accounts and paid orders, which users
+-- must never write themselves. Supabase usually grants service_role access to
+-- new tables automatically, but not always for tables created in the SQL
+-- editor ("permission denied for table …"), so grant it explicitly. Kept at
+-- the end so it covers every table above. service_role bypasses RLS; nothing
+-- in the browser ever holds this key.
+-- ============================================================================
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+grant execute on function public.complete_order(uuid, text, text, text) to service_role;

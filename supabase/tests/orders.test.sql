@@ -103,4 +103,20 @@ begin
 end;
 $$;
 
+-- the server (service_role key) can record payout accounts and complete orders
+set role service_role;
+insert into public.account_billing (user_id, stripe_connect_account_id)
+values ('00000000-0000-0000-0000-0000000000c1', 'acct_test_123')
+on conflict (user_id) do update set stripe_connect_account_id = excluded.stripe_connect_account_id;
+update public.account_billing set connect_charges_enabled = true where stripe_connect_account_id = 'acct_test_123';
+insert into public.orders (id, sale_id, item_id, item_name, amount_cents, fee_cents, pickup_code) values
+  ('e0000000-0000-0000-0000-000000000009', 'c0000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000009', 'dresser', 8000, 262, '3333');
+do $$
+begin
+  assert public.complete_order('e0000000-0000-0000-0000-000000000009', 'pi_9', 'e@x.com', 'Ray') = 'paid', 'server completes orders';
+  assert (select connect_charges_enabled from public.account_billing where user_id = '00000000-0000-0000-0000-0000000000c1'), 'server saves payout status';
+end;
+$$;
+reset role;
+
 \echo 'orders.test.sql: all checks passed'

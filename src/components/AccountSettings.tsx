@@ -361,7 +361,7 @@ function GettingPaidSection({
             ? "Thanks! Stripe may need a few minutes — or a bit more info — before you can take payments."
             : STRIPE_NOTICES[stripeNotice]}
           {stripeNotice === "error" && stripeDetail && (
-            <span className="block font-normal mt-0.5">Stripe said: &ldquo;{stripeDetail}&rdquo;</span>
+            <span className="block font-normal mt-0.5">Details: {stripeDetail}</span>
           )}
         </div>
       )}
