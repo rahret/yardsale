@@ -94,13 +94,39 @@ begin
   assert (public.reserve_item('d0000000-0000-0000-0000-000000000009', 'Pat', '312-555-0177') ->> 'error') like '%use Buy Now%',
     'holds are refused on Buy Now items';
   assert (select status from public.items where id = 'd0000000-0000-0000-0000-000000000009') = 'available', 'still available';
+  -- bulk items are always first come, first served
+  insert into public.items (id, sale_id, name, price, sell_mode, quantity_total, quantity_available)
+  values ('d0000000-0000-0000-0000-00000000000b', 'c0000000-0000-0000-0000-000000000001', 'books', 1, 'buy_now', 20, 20);
+  assert (select sell_mode from public.items where id = 'd0000000-0000-0000-0000-00000000000b') = 'in_person',
+    'bulk items become first come, first served';
   begin
-    insert into public.items (sale_id, name, price, sell_mode, quantity_total, quantity_available)
-    values ('c0000000-0000-0000-0000-000000000001', 'books', 1, 'buy_now', 20, 20);
-    raise exception 'bulk items must not be Buy Now';
+    update public.items set sell_mode = 'hold' where id = 'd0000000-0000-0000-0000-00000000000b';
+    raise exception 'bulk items must not be held';
   exception when check_violation then null;
   end;
+
+  -- first come, first served items can't be held either
+  insert into public.items (id, sale_id, name, price, sell_mode) values
+    ('d0000000-0000-0000-0000-00000000000a', 'c0000000-0000-0000-0000-000000000001', 'rake', 5, 'in_person');
+  assert (public.reserve_item('d0000000-0000-0000-0000-00000000000a', 'Pat', '312-555-0178') ->> 'error') like '%first come, first served%',
+    'holds are refused on first-come items';
 end;
 $$;
+
+-- the server (service_role key) can record payout accounts and complete orders
+set role service_role;
+insert into public.account_billing (user_id, stripe_connect_account_id)
+values ('00000000-0000-0000-0000-0000000000c1', 'acct_test_123')
+on conflict (user_id) do update set stripe_connect_account_id = excluded.stripe_connect_account_id;
+update public.account_billing set connect_charges_enabled = true where stripe_connect_account_id = 'acct_test_123';
+insert into public.orders (id, sale_id, item_id, item_name, amount_cents, fee_cents, pickup_code) values
+  ('e0000000-0000-0000-0000-000000000009', 'c0000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000009', 'dresser', 8000, 262, '3333');
+do $$
+begin
+  assert public.complete_order('e0000000-0000-0000-0000-000000000009', 'pi_9', 'e@x.com', 'Ray') = 'paid', 'server completes orders';
+  assert (select connect_charges_enabled from public.account_billing where user_id = '00000000-0000-0000-0000-0000000000c1'), 'server saves payout status';
+end;
+$$;
+reset role;
 
 \echo 'orders.test.sql: all checks passed'

@@ -51,7 +51,7 @@ const emptyForm = {
   icon: "📦",
   isBulk: false,
   quantity: "",
-  sellMode: "hold" as SellMode,
+  sellMode: "in_person" as SellMode,
 };
 
 export default function SaleAdmin({
@@ -293,7 +293,7 @@ export default function SaleAdmin({
     e.preventDefault();
     if (!form.name.trim()) return;
     setAddError("");
-    const sellMode: SellMode = form.isBulk ? "hold" : form.sellMode;
+    const sellMode: SellMode = form.isBulk ? "in_person" : form.sellMode;
     const modeError = sellModeError(sellMode, form.price, payoutsReady);
     if (modeError) {
       setAddError(modeError);
@@ -348,7 +348,7 @@ export default function SaleAdmin({
   async function saveEdit(id: string) {
     const supabase = createClient();
     const isBulk = editForm.isBulk;
-    const sellMode: SellMode = isBulk ? "hold" : editForm.sellMode;
+    const sellMode: SellMode = isBulk ? "in_person" : editForm.sellMode;
     const modeError = sellModeError(sellMode, editForm.price, payoutsReady, items.find((i) => i.id === id)?.sell_mode);
     if (modeError) {
       setEditError(modeError);
@@ -877,7 +877,7 @@ export default function SaleAdmin({
                   className="w-full px-3 py-2 border-2 border-cardboard-dark rounded-lg"
                 />
               </Field>
-            ) : form.sellMode === "buy_now" ? null : (
+            ) : form.sellMode !== "hold" ? null : (
               <Field label="Reservation minutes (optional)">
                 <input
                   type="number"
@@ -942,7 +942,7 @@ export default function SaleAdmin({
                   <div className="font-bold text-sm">{item.name}</div>
                   <div className="text-xs opacity-60">
                     {money(item.price)} · {item.category} · <StatusBadge status={item.status} />
-                    {!isBulkItem(item) && <> · {item.sell_mode === "buy_now" ? "💳 Buy Now" : "✋ Hold"}</>}
+                    {!isBulkItem(item) && <> · {SELL_MODE_LABELS[item.sell_mode] ?? SELL_MODE_LABELS.hold}</>}
                     {item.status === "reserved" && item.item_holds && (
                       <>
                         {" "}
@@ -1186,6 +1186,12 @@ export default function SaleAdmin({
   );
 }
 
+const SELL_MODE_LABELS: Record<SellMode, string> = {
+  in_person: "🏃 First come, first served",
+  hold: "✋ Hold",
+  buy_now: "💳 Buy Now",
+};
+
 /** Why an item can't be set to Buy Now, or "" if it can. An item that is
  * already Buy Now can keep it (so editing other fields never fails). */
 function sellModeError(mode: SellMode, price: string, payoutsReady: boolean, currentMode?: SellMode): string {
@@ -1197,8 +1203,8 @@ function sellModeError(mode: SellMode, price: string, payoutsReady: boolean, cur
   return "";
 }
 
-/** "How buyers get it": Hold (reserve, pay in person) or Buy Now (pay
- * online). An item is one or the other, never both. */
+/** "How buyers get it": first come, first served; Hold (reserve, pay in
+ * person); or Buy Now (pay online). Exactly one per item. */
 function SellModePicker({
   value,
   onChange,
@@ -1216,7 +1222,7 @@ function SellModePicker({
   const tooCheap = price !== "" && toCents(Number(price) || 0) < MIN_CHARGE_CENTS;
   const option = (mode: SellMode, title: string, hint: string, disabled = false) => (
     <label
-      className={`flex-1 min-w-[150px] flex items-start gap-2 border-2 rounded-lg px-3 py-2 cursor-pointer ${
+      className={`flex items-start gap-2 border-2 rounded-lg px-3 py-2 cursor-pointer ${
         value === mode ? "border-ink bg-chalk" : "border-cardboard-dark/50 bg-white"
       } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
     >
@@ -1236,9 +1242,10 @@ function SellModePicker({
   return (
     <div className="mb-2.5">
       <div className="text-xs font-bold opacity-70 mb-1">How buyers get it</div>
-      <div className="flex gap-2 flex-wrap">
-        {option("hold", "✋ Hold", "Buyer reserves it, pays you in person")}
-        {option("buy_now", "💳 Buy Now", "Buyer pays online, picks up with a code", buyNowBlocked)}
+      <div className="grid gap-2 sm:grid-cols-3">
+        {option("in_person", SELL_MODE_LABELS.in_person, "No holds or online payment — buyers just show up")}
+        {option("hold", SELL_MODE_LABELS.hold, "Buyer reserves it, pays you in person")}
+        {option("buy_now", SELL_MODE_LABELS.buy_now, "Buyer pays online, picks up with a code", buyNowBlocked)}
       </div>
       {buyNowBlocked && (
         <div className="text-[11px] opacity-60 mt-1">
