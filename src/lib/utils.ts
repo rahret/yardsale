@@ -57,6 +57,13 @@ export function formatPhone(digits: string): string {
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : digits;
 }
 
+/** A post-login/confirmation destination that stays on this site: a path
+ * like "/dashboard", never "//host", "/\\host", "@host" or a full URL
+ * (which would make the link an open redirect for phishing). */
+export function safeRedirectPath(requested: string | null | undefined, fallback = "/dashboard"): string {
+  return requested && /^\/(?![/\\])/.test(requested) ? requested : fallback;
+}
+
 export function slugify(input: string): string {
   return input
     .toLowerCase()

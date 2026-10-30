@@ -11,7 +11,9 @@ import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import FitText from "@/components/FitText";
 import ShareSaleCard from "@/components/ShareSaleCard";
 import BuyNowCard from "@/components/BuyNowCard";
+import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
 import { MIN_CHARGE_CENTS, toCents } from "@/lib/fees";
+import { HOUR_OPTIONS, toHour } from "@/lib/hours";
 
 const MAX_SALE_DAYS = 7;
 const MAX_FEATURED = 3;
@@ -19,13 +21,6 @@ const NOTE_MAX = 120;
 
 type DayRow = { key: string; date: string; start_time: string; end_time: string };
 
-// Sale times are picked by the hour only, so stored times are snapped to "HH:00".
-const toHour = (t: string) => `${t.slice(0, 2)}:00`;
-
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
-  value: `${String(h).padStart(2, "0")}:00`,
-  label: `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? "AM" : "PM"}`,
-}));
 
 function toDayRows(days: SaleDay[]): DayRow[] {
   return sortSaleDays(days).map((d) => ({
@@ -62,6 +57,7 @@ export default function SaleAdmin({
   profilePaymentOptions,
   payoutsReady = false,
   initialOrders = [],
+  justCreated = false,
 }: {
   sale: Sale;
   initialItems: Item[];
@@ -72,6 +68,8 @@ export default function SaleAdmin({
   /** The seller's Stripe account can take payments. */
   payoutsReady?: boolean;
   initialOrders?: Order[];
+  /** Arrived from the welcome wizard. */
+  justCreated?: boolean;
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
@@ -115,6 +113,50 @@ export default function SaleAdmin({
     () => [...dayRows].filter((d) => d.date).sort((a, b) => a.date.localeCompare(b.date)),
     [dayRows]
   );
+
+  // Getting started checklist. Printing and sharing leave no trace in the
+  // data, so this browser remembers them (as it does hiding the checklist).
+  const [checklistFlags, setChecklistFlags] = useState<Record<string, boolean>>({});
+  const flagKey = (flag: string) => `checklist:${sale.id}:${flag}`;
+  useEffect(() => {
+    try {
+      setChecklistFlags({
+        printed: !!localStorage.getItem(flagKey("printed")),
+        shared: !!localStorage.getItem(flagKey("shared")),
+        hidden: !!localStorage.getItem(flagKey("hidden")),
+      });
+    } catch {
+      // storage unavailable (private mode): the checklist just won't remember
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sale.id]);
+  function markDone(flag: "printed" | "shared" | "hidden") {
+    setChecklistFlags((f) => ({ ...f, [flag]: true }));
+    try {
+      localStorage.setItem(flagKey(flag), "1");
+    } catch {}
+  }
+  useEffect(() => {
+    if (printJob) markDone("printed");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printJob]);
+
+  const checklist: ChecklistStep[] = [
+    { key: "address", label: "Add your address", done: !!sale.street?.trim(), href: "#sale-details", action: "Add address" },
+    { key: "days", label: "Pick your sale days", done: dayRows.some((d) => d.date), href: "#sale-details", action: "Add dates" },
+    { key: "items", label: "Add at least 3 items", done: items.length >= 3, href: "#add-item", action: "Add items" },
+    {
+      key: "photo",
+      label: "Add a photo to an item",
+      done: items.some((i) => (i.item_photos?.length || 0) > 0),
+      href: "#items",
+      action: "Add photo",
+    },
+    { key: "live", label: "Set your sale to Live", done: sale.status === "live", href: "#status", action: "Go live" },
+    { key: "print", label: "Print your QR sign", done: !!checklistFlags.printed, href: "#share", action: "Print sign" },
+    { key: "share", label: "Share your link", done: !!checklistFlags.shared, href: "#share", action: "Share" },
+  ];
+  const showChecklist = !checklistFlags.hidden && checklist.some((s) => !s.done);
 
   // sales saved before map coordinates existed: look them up once
   useEffect(() => {
@@ -512,6 +554,7 @@ export default function SaleAdmin({
 
   function copyLink() {
     navigator.clipboard?.writeText(shareUrl);
+    markDone("shared");
   }
 
   return (
@@ -520,6 +563,10 @@ export default function SaleAdmin({
         ← All sales
       </a>
       <div className="font-marker text-3xl text-marker -rotate-1 mt-2 mb-5 break-words">{sale.name}</div>
+
+      {showChecklist && (
+        <SaleChecklist steps={checklist} justCreated={justCreated} onDismiss={() => markDone("hidden")} />
+      )}
 
       {/* stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-5">
@@ -532,7 +579,7 @@ export default function SaleAdmin({
       </div>
 
       {/* status */}
-      <Card title="🚦 Sale status">
+      <Card title="🚦 Sale status" id="status">
         <div className="flex gap-2 flex-wrap">
           {STATUS_OPTIONS.map((opt) => (
             <button
@@ -599,7 +646,7 @@ export default function SaleAdmin({
       </Card>
 
       {/* share + qr */}
-      <Card title="📣 Share your sale">
+      <Card title="📣 Share your sale" id="share">
         <div className="flex gap-2 mb-3">
           <input readOnly value={shareUrl} className="flex-1 px-3 py-2 border-2 border-cardboard-dark rounded-lg text-sm" />
           <button onClick={copyLink} className="bg-ink text-chalk font-bold px-4 rounded-lg text-sm">
@@ -636,11 +683,17 @@ export default function SaleAdmin({
             🪧 Create sign
           </button>
         </div>
-        <ShareSaleCard sale={sale} items={items} days={sortedDayRows} onSaleChange={setSale} />
+        <ShareSaleCard
+          sale={sale}
+          items={items}
+          days={sortedDayRows}
+          onSaleChange={setSale}
+          onShared={() => markDone("shared")}
+        />
       </Card>
 
       {/* sale settings */}
-      <Card title="🏷️ Sale details">
+      <Card title="🏷️ Sale details" id="sale-details">
         <Field label="Sale name">
           <input
             value={saleForm.name}
@@ -844,7 +897,7 @@ export default function SaleAdmin({
       </Card>
 
       {/* add item */}
-      <Card title="➕ Add an item">
+      <Card title="➕ Add an item" id="add-item">
         <form onSubmit={addItem}>
           <div className="flex gap-1.5 flex-wrap mb-3">
             {EMOJI_PRESETS.map((e) => (
@@ -955,7 +1008,7 @@ export default function SaleAdmin({
       </Card>
 
       {/* item list */}
-      <Card title={`📋 Items (${items.length})`}>
+      <Card title={`📋 Items (${items.length})`} id="items">
         {sortedItems.length === 0 && <div className="text-sm opacity-60">No items yet — add your first one above.</div>}
         <div className="divide-y divide-chalk-dim">
           {sortedItems.map((item) => (
@@ -1307,9 +1360,9 @@ function Stat({ num, label }: { num: number | string; label: string }) {
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white border-2 border-cardboard-dark rounded-xl p-4 mb-4">
+    <div id={id} className="bg-white border-2 border-cardboard-dark rounded-xl p-4 mb-4 scroll-mt-4">
       <h3 className="text-sm font-bold mb-3">{title}</h3>
       {children}
     </div>

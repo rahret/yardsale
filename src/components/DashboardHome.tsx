@@ -62,9 +62,15 @@ export default function DashboardHome({
       </div>
 
       {sales.length === 0 && !creating && (
-        <div className="border-2 border-dashed border-cardboard-dark rounded-xl p-8 text-center opacity-75 mb-6">
-          <span className="font-marker text-xl text-marker block mb-2">no sales yet!</span>
-          Create your first garage sale to get a shareable link and QR code.
+        <div className="bg-white border-2 border-cardboard-dark rounded-xl p-6 text-center shadow-tag mb-6">
+          <div className="text-4xl mb-1">🏷️</div>
+          <span className="font-marker text-2xl text-marker block mb-1">Let&apos;s set up your first sale</span>
+          <p className="text-sm opacity-75 mb-4">
+            Three quick steps — name, address and dates — then add items, print your QR sign and share it.
+          </p>
+          <a href="/dashboard/welcome" className="inline-block bg-grass text-white font-bold px-6 py-3 rounded-lg shadow-tag">
+            Start setup — about 2 minutes
+          </a>
         </div>
       )}
 

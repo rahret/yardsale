@@ -106,6 +106,13 @@ _Last updated: 2026-10-28_
   - _Still to do:_ most-viewed items (item visits are already recorded), reservations and
     sales over time, a proper stats view.
 
+## 3½. Onboarding
+
+- ✅ _Done (pending merge):_ new sellers land in a 3-step **welcome wizard** after confirming
+  their email (name → address → dates; creates a draft sale), a **Getting started checklist**
+  on the sale page (address, dates, 3+ items, a photo, go Live, print sign, share — each with
+  a jump button; hideable), and an empty dashboard that points to the wizard.
+
 ## 4. Basic gaps
 
 - ✅ **There's no "forgot password" on the login page.** Users who forget theirs are locked
@@ -126,7 +133,13 @@ _Last updated: 2026-10-28_
 
 ## 5. Monetization & payments
 
-- 🟡 **Subscriptions (seller plans).** Account page shows the plan and an "Upgrade to Pro"
+- 🟡 **Subscriptions (seller plans).** _Proposed pricing (to confirm):_ **Free** — one active
+  sale, ~25 items, holds, QR sign, sharing, directory listing; **Pro $7.99/mo or $59/yr** —
+  unlimited sales/items, Buy Now with the platform fee waived, visit stats, more sign layouts,
+  future AI item entry and promoted listings; later maybe **Business ~$24.99/mo** for
+  estate-sale companies. A **7-day free trial (card required, cancel anytime)** is planned;
+  note many sales happen within a week, so consider limiting what the trial includes or
+  adding a one-time **Sale Pass (~$9.99 / 30 days)**. Account page shows the plan and an "Upgrade to Pro"
   placeholder; `account_billing` table is ready (read-only to users, written by Stripe
   webhooks).
   - _To do:_ Stripe Checkout + customer billing portal, webhook to update `account_billing`,

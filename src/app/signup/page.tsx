@@ -30,7 +30,8 @@ export default function SignupPage() {
       password,
       options: {
         data: { display_name: displayName || email.split("@")[0] },
-        emailRedirectTo: `${siteUrl}/auth/callback`,
+        // first-timers start in the welcome wizard after confirming their email
+        emailRedirectTo: `${siteUrl}/auth/callback?redirectTo=/dashboard/welcome`,
       },
     });
     setLoading(false);

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeRedirectPath } from "@/lib/utils";
 
 // Handles the redirect after a user clicks the confirmation link in their
 // signup email. Exchanges the one-time code for a real session, then sends
@@ -7,7 +8,7 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const redirectTo = searchParams.get("redirectTo") || "/dashboard";
+  const redirectTo = safeRedirectPath(searchParams.get("redirectTo"));
 
   if (code) {
     const supabase = createClient();

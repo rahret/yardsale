@@ -6,6 +6,7 @@ import {
   formatSignTime,
   isEffectivelyExpired,
   money,
+  safeRedirectPath,
   passwordError,
   PASSWORD_SPECIALS,
   reservationDeadline,
@@ -105,4 +106,17 @@ describe("passwordError", () => {
   it("accepts each listed special character", () => {
     for (const c of PASSWORD_SPECIALS) expect(passwordError(`Garage${c}le1`)).toBe("");
   });
+});
+
+describe("safeRedirectPath", () => {
+  it("allows pages on this site", () => {
+    expect(safeRedirectPath("/dashboard/welcome")).toBe("/dashboard/welcome");
+    expect(safeRedirectPath("/dashboard/sales/1?x=1")).toBe("/dashboard/sales/1?x=1");
+  });
+  it.each(["//evil.com", "/\\evil.com", "@evil.com", "https://evil.com", "javascript:alert(1)", "", null])(
+    "refuses %s",
+    (v) => {
+      expect(safeRedirectPath(v)).toBe("/dashboard");
+    }
+  );
 });

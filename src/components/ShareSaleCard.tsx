@@ -23,11 +23,14 @@ export default function ShareSaleCard({
   items,
   days,
   onSaleChange,
+  onShared,
 }: {
   sale: Sale;
   items: Item[];
   days: Days;
   onSaleChange: (sale: Sale) => void;
+  /** The seller used any of the share tools. */
+  onShared?: () => void;
 }) {
   const origin = siteOriginForClient();
   const [postKind, setPostKind] = useState<PostKind>("group");
@@ -49,6 +52,7 @@ export default function ShareSaleCard({
   }, [sale.id]);
 
   async function copy(text: string, what: string) {
+    onShared?.();
     try {
       await navigator.clipboard.writeText(text);
       setCopied(what);
@@ -97,17 +101,20 @@ export default function ShareSaleCard({
           text={`Yard sale: ${sale.name}`}
           label="↗ Share…"
           className="bg-grass text-white font-bold px-3 py-1.5 rounded-lg text-xs"
+          onShare={onShared}
         />
         <a
           className={btn}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={onShared}
           href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(saleLink(origin, sale.slug, { src: "facebook" }))}`}
         >
           Facebook
         </a>
         <a
           className={btn}
+          onClick={onShared}
           href={`mailto:?subject=${encodeURIComponent(`Yard sale: ${sale.name}`)}&body=${encodeURIComponent(
             salePost("text", sale, days as SaleDay[], items, saleLink(origin, sale.slug, { src: "email" }))
           )}`}
@@ -116,6 +123,7 @@ export default function ShareSaleCard({
         </a>
         <a
           className={btn}
+          onClick={onShared}
           href={`sms:?&body=${encodeURIComponent(
             salePost("text", sale, days as SaleDay[], items, saleLink(origin, sale.slug, { src: "text" }))
           )}`}
