@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: { stripe?: string; detail?: string };
+  searchParams: { stripe?: string; detail?: string; billing?: string };
 }) {
   const supabase = createClient();
   const {
@@ -38,6 +38,7 @@ export default async function AccountPage({
       saleCount={saleCount || 0}
       stripeNotice={searchParams.stripe}
       stripeDetail={searchParams.detail}
+      billingNotice={searchParams.billing}
     />
   );
 }

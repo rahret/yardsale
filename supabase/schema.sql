@@ -74,6 +74,21 @@ create table if not exists public.account_billing (
   updated_at timestamptz not null default now()
 );
 
+-- Plans (no free tier): a 7-day trial (card required) of the monthly or yearly
+-- Pro subscription with limited features, Pro itself, or a one-time 30-day
+-- Sale Pass. `plan` is 'pro' while a subscription exists, 'comp' for
+-- complimentary accounts (set by hand), else 'none'.
+alter table public.account_billing drop constraint if exists account_billing_plan_check;
+update public.account_billing set plan = 'none' where plan = 'free';
+alter table public.account_billing alter column plan set default 'none';
+alter table public.account_billing add constraint account_billing_plan_check
+  check (plan in ('none', 'pro', 'comp'));
+alter table public.account_billing add column if not exists billing_interval text;
+alter table public.account_billing add column if not exists trial_ends_at timestamptz;
+-- one free trial per account
+alter table public.account_billing add column if not exists trial_used boolean not null default false;
+alter table public.account_billing add column if not exists pass_expires_at timestamptz;
+
 alter table public.account_billing enable row level security;
 
 drop policy if exists "Users can view their own billing" on public.account_billing;
@@ -93,12 +108,100 @@ begin
   if auth.uid() is null then
     raise exception 'Not signed in';
   end if;
+  -- Stripe would keep billing a deleted account
+  if exists (
+    select 1 from public.account_billing
+    where user_id = auth.uid() and subscription_status in ('trialing', 'active', 'past_due') and not cancel_at_period_end
+  ) then
+    raise exception 'Cancel your subscription first (Plan & billing → Manage billing), then delete your account.';
+  end if;
   delete from auth.users where id = auth.uid();
 end;
 $$;
 
 revoke all on function public.delete_my_account() from public, anon;
 grant execute on function public.delete_my_account() to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- seller_access: what a seller's plan allows right now.
+--   'full'  — Pro (active, or past due while Stripe retries the card), an
+--             unexpired Sale Pass, or a complimentary account
+--   'trial' — the 7-day trial: one sale, 25 items, no Holds, no Buy Now, not
+--             listed in Find yard sales
+--   'none'  — no plan: existing sales stay up, nothing new can be added
+-- Security definer so public pages and the directory can ask without seeing
+-- anyone's billing row.
+-- ----------------------------------------------------------------------------
+create or replace function public.seller_access(p_user uuid)
+returns text
+language sql
+stable
+security definer set search_path = public
+as $$
+  select case
+    when b.plan = 'comp' then 'full'
+    when b.pass_expires_at > now() then 'full'
+    when b.subscription_status in ('active', 'past_due') then 'full'
+    when b.subscription_status = 'trialing' then 'trial'
+    else 'none'
+  end
+  from (select 1) one
+  left join public.account_billing b on b.user_id = p_user;
+$$;
+
+grant execute on function public.seller_access(uuid) to anon, authenticated, service_role;
+
+-- ----------------------------------------------------------------------------
+-- sale_passes: one row per Sale Pass purchase (keyed by the Stripe Checkout
+-- session so a repeated webhook can't extend a pass twice).
+-- ----------------------------------------------------------------------------
+create table if not exists public.sale_passes (
+  stripe_session_id text primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  amount_cents int not null,
+  starts_at timestamptz not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.sale_passes enable row level security;
+
+drop policy if exists "Users can view their own sale passes" on public.sale_passes;
+create policy "Users can view their own sale passes"
+  on public.sale_passes for select
+  using (auth.uid() = user_id);
+
+-- Records a paid Sale Pass and extends the seller's access by p_days from
+-- now, or from the end of a pass they already have. Returns the new expiry.
+create or replace function public.grant_sale_pass(p_user uuid, p_session text, p_amount_cents int, p_days int default 30)
+returns timestamptz
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_start timestamptz;
+  v_end timestamptz;
+begin
+  select greatest(now(), coalesce(pass_expires_at, now())) into v_start
+  from public.account_billing where user_id = p_user;
+  v_start := coalesce(v_start, now());
+  v_end := v_start + make_interval(days => p_days);
+
+  insert into public.sale_passes (stripe_session_id, user_id, amount_cents, starts_at, expires_at)
+  values (p_session, p_user, p_amount_cents, v_start, v_end)
+  on conflict (stripe_session_id) do nothing;
+  if not found then
+    return (select pass_expires_at from public.account_billing where user_id = p_user);
+  end if;
+
+  insert into public.account_billing (user_id, pass_expires_at, updated_at)
+  values (p_user, v_end, now())
+  on conflict (user_id) do update set pass_expires_at = v_end, updated_at = now();
+  return v_end;
+end;
+$$;
+
+revoke all on function public.grant_sale_pass(uuid, text, int, int) from public, anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- sales: one garage sale, owned by a user. a user can own many sales.
@@ -642,6 +745,7 @@ as $$
     from public.sales s
     where s.status = 'live'
       and s.listed
+      and public.seller_access(s.owner_id) = 'full'
       and (p_category is null or exists (
         select 1 from public.items i
         where i.sale_id = s.id and i.status <> 'sold' and lower(i.category) = lower(p_category)))
@@ -784,6 +888,7 @@ grant usage on schema public to anon, authenticated;
 
 grant select, update on public.profiles to anon, authenticated;
 grant select on public.account_billing to authenticated;
+grant select on public.sale_passes to authenticated;
 grant select, delete on public.item_holds to authenticated;
 grant select on public.sale_visits to authenticated;
 grant select on public.orders to authenticated;
@@ -852,6 +957,87 @@ drop trigger if exists items_sync_status on public.items;
 create trigger items_sync_status
   before insert or update of quantity_total, quantity_available, status on public.items
   for each row execute procedure public.sync_item_status();
+
+-- ----------------------------------------------------------------------------
+-- Plan limits, enforced for sellers' own writes (the anon/authenticated
+-- roles; the server and Stripe webhooks write as service_role and skip them).
+-- See seller_access for what each level allows. The app shows the same
+-- limits up front; these are the backstop.
+-- ----------------------------------------------------------------------------
+create or replace function public.enforce_sale_plan()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_access text;
+begin
+  if current_user not in ('anon', 'authenticated') then
+    return new;
+  end if;
+  v_access := public.seller_access(new.owner_id);
+
+  if tg_op = 'INSERT' then
+    if v_access = 'none' then
+      raise exception 'Start your free trial or choose a plan to create a sale.' using errcode = 'P0001';
+    end if;
+    if v_access = 'trial' and exists (select 1 from public.sales where owner_id = new.owner_id) then
+      raise exception 'Your free trial includes one sale. Upgrade to Pro or get a Sale Pass to create more.'
+        using errcode = 'P0001';
+    end if;
+    if v_access <> 'full' then
+      new.listed := false;
+    end if;
+  elsif new.listed and not old.listed and v_access <> 'full' then
+    raise exception 'Listing your sale in Find yard sales is part of Pro and the Sale Pass.' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists sales_enforce_plan on public.sales;
+create trigger sales_enforce_plan
+  before insert or update of listed on public.sales
+  for each row execute procedure public.enforce_sale_plan();
+
+create or replace function public.enforce_item_plan()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_access text;
+begin
+  if current_user not in ('anon', 'authenticated') then
+    return new;
+  end if;
+  select public.seller_access(s.owner_id) into v_access from public.sales s where s.id = new.sale_id;
+  v_access := coalesce(v_access, 'none');
+
+  if tg_op = 'INSERT' then
+    if v_access = 'none' then
+      raise exception 'Start your free trial or choose a plan to add items.' using errcode = 'P0001';
+    end if;
+    if v_access = 'trial' and (select count(*) from public.items where sale_id = new.sale_id) >= 25 then
+      raise exception 'Your free trial includes up to 25 items. Upgrade to Pro or get a Sale Pass to add more.'
+        using errcode = 'P0001';
+    end if;
+  end if;
+
+  -- bulk items are always first come, first served (sync_item_status), so
+  -- whatever mode they were sent with doesn't matter
+  if v_access <> 'full'
+    and new.quantity_total = 1
+    and new.sell_mode in ('hold', 'buy_now')
+    and (tg_op = 'INSERT' or new.sell_mode is distinct from old.sell_mode) then
+    raise exception 'Holds and Buy Now are part of Pro and the Sale Pass.' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists items_enforce_plan on public.items;
+create trigger items_enforce_plan
+  before insert or update of sell_mode on public.items
+  for each row execute procedure public.enforce_item_plan();
 
 -- ----------------------------------------------------------------------------
 -- adjust_item_quantity: atomically bumps a bulk item's live available count
@@ -1059,6 +1245,10 @@ begin
     return jsonb_build_object('success', false, 'error', 'This item is first come, first served — come by the sale to buy it.');
   end if;
 
+  if public.seller_access((select owner_id from public.sales where id = v_item.sale_id)) <> 'full' then
+    return jsonb_build_object('success', false, 'error', 'This item is first come, first served — come by the sale to buy it.');
+  end if;
+
   select * into v_sale from public.sales where id = v_item.sale_id for update;
   if not found or v_sale.status <> 'live' then
     return jsonb_build_object('success', false, 'error', 'This sale is not currently accepting reservations.');
@@ -1159,3 +1349,4 @@ grant usage on schema public to service_role;
 grant select, insert, update, delete on all tables in schema public to service_role;
 grant usage, select on all sequences in schema public to service_role;
 grant execute on function public.complete_order(uuid, text, text, text) to service_role;
+grant execute on function public.grant_sale_pass(uuid, text, int, int) to service_role;

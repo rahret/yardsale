@@ -14,6 +14,8 @@ import BuyNowCard from "@/components/BuyNowCard";
 import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
 import { MIN_CHARGE_CENTS, toCents } from "@/lib/fees";
 import { HOUR_OPTIONS, toHour } from "@/lib/hours";
+import { type Access, TRIAL_LIMITS } from "@/lib/billing";
+import { LockedBadge, UpgradeNote } from "@/components/PlanOptions";
 
 const MAX_SALE_DAYS = 7;
 const MAX_FEATURED = 3;
@@ -58,6 +60,7 @@ export default function SaleAdmin({
   payoutsReady = false,
   initialOrders = [],
   justCreated = false,
+  access = "full",
 }: {
   sale: Sale;
   initialItems: Item[];
@@ -70,9 +73,14 @@ export default function SaleAdmin({
   initialOrders?: Order[];
   /** Arrived from the welcome wizard. */
   justCreated?: boolean;
+  /** What the seller's plan allows (see lib/billing). */
+  access?: Access;
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
+  // Pro / Sale Pass: holds, Buy Now, directory listing, no item cap
+  const premium = access === "full";
+  const itemLimitReached = access === "none" || (access === "trial" && items.length >= TRIAL_LIMITS.items);
   const [form, setForm] = useState(emptyForm);
   const [addError, setAddError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -360,7 +368,7 @@ export default function SaleAdmin({
     if (!form.name.trim()) return;
     setAddError("");
     const sellMode: SellMode = form.isBulk ? "in_person" : form.sellMode;
-    const modeError = sellModeError(sellMode, form.price, payoutsReady);
+    const modeError = sellModeError(sellMode, form.price, payoutsReady, premium);
     if (modeError) {
       setAddError(modeError);
       return;
@@ -415,7 +423,7 @@ export default function SaleAdmin({
     const supabase = createClient();
     const isBulk = editForm.isBulk;
     const sellMode: SellMode = isBulk ? "in_person" : editForm.sellMode;
-    const modeError = sellModeError(sellMode, editForm.price, payoutsReady, items.find((i) => i.id === id)?.sell_mode);
+    const modeError = sellModeError(sellMode, editForm.price, payoutsReady, premium, items.find((i) => i.id === id)?.sell_mode);
     if (modeError) {
       setEditError(modeError);
       return;
@@ -636,6 +644,13 @@ export default function SaleAdmin({
 
       {/* online payments */}
       <Card title="💳 Buy Now (online payments)">
+        {!premium && (
+          <div className="mb-3">
+            <UpgradeNote>
+              <LockedBadge className="mr-1" /> Buy Now and Holds are part of Pro and the Sale Pass.
+            </UpgradeNote>
+          </div>
+        )}
         <BuyNowCard
           sale={sale}
           payoutsReady={payoutsReady}
@@ -689,6 +704,7 @@ export default function SaleAdmin({
           days={sortedDayRows}
           onSaleChange={setSale}
           onShared={() => markDone("shared")}
+          canList={premium}
         />
       </Card>
 
@@ -898,6 +914,20 @@ export default function SaleAdmin({
 
       {/* add item */}
       <Card title="➕ Add an item" id="add-item">
+        {access === "trial" && (
+          <div className="text-xs opacity-70 mb-2">
+            Free trial: {Math.min(items.length, TRIAL_LIMITS.items)} of {TRIAL_LIMITS.items} items used.
+          </div>
+        )}
+        {itemLimitReached && (
+          <div className="mb-3">
+            <UpgradeNote>
+              {access === "trial"
+                ? `Your free trial includes up to ${TRIAL_LIMITS.items} items.`
+                : "You don't have a plan right now, so you can't add items."}
+            </UpgradeNote>
+          </div>
+        )}
         <form onSubmit={addItem}>
           <div className="flex gap-1.5 flex-wrap mb-3">
             {EMOJI_PRESETS.map((e) => (
@@ -988,6 +1018,7 @@ export default function SaleAdmin({
               value={form.sellMode}
               onChange={(sellMode) => setForm({ ...form, sellMode })}
               payoutsReady={payoutsReady}
+              premium={premium}
               price={form.price}
             />
           )}
@@ -1000,7 +1031,11 @@ export default function SaleAdmin({
             />
           </Field>
           {addError && <div className="text-marker text-sm font-semibold mb-2">{addError}</div>}
-          <button type="submit" className="bg-grass text-white font-bold px-5 py-2.5 rounded-lg shadow-tag">
+          <button
+            type="submit"
+            disabled={itemLimitReached}
+            className="bg-grass text-white font-bold px-5 py-2.5 rounded-lg shadow-tag disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             Add item
           </button>
           <div className="text-xs opacity-60 mt-2">You can add photos once the item is created, below.</div>
@@ -1157,6 +1192,7 @@ export default function SaleAdmin({
                       value={editForm.sellMode}
                       onChange={(sellMode) => setEditForm({ ...editForm, sellMode })}
                       payoutsReady={payoutsReady}
+                      premium={premium}
                       price={editForm.price}
                       currentMode={item.sell_mode}
                     />
@@ -1269,9 +1305,18 @@ const SELL_MODE_LABELS: Record<SellMode, string> = {
   buy_now: "💳 Buy Now",
 };
 
-/** Why an item can't be set to Buy Now, or "" if it can. An item that is
- * already Buy Now can keep it (so editing other fields never fails). */
-function sellModeError(mode: SellMode, price: string, payoutsReady: boolean, currentMode?: SellMode): string {
+/** Why an item can't use this mode, or "" if it can. An item that already
+ * has the mode can keep it (so editing other fields never fails). */
+function sellModeError(
+  mode: SellMode,
+  price: string,
+  payoutsReady: boolean,
+  premium: boolean,
+  currentMode?: SellMode
+): string {
+  if (mode !== "in_person" && !premium && currentMode !== mode) {
+    return "Holds and Buy Now are part of Pro and the Sale Pass — see plans on your Account page.";
+  }
   if (mode !== "buy_now") return "";
   if (!payoutsReady && currentMode !== "buy_now") return "Set up payouts on your Account page to use Buy Now.";
   if (toCents(Number(price) || 0) < MIN_CHARGE_CENTS) {
@@ -1286,18 +1331,22 @@ function SellModePicker({
   value,
   onChange,
   payoutsReady,
+  premium,
   price,
   currentMode,
 }: {
   value: SellMode;
   onChange: (mode: SellMode) => void;
   payoutsReady: boolean;
+  /** The seller's plan includes Holds and Buy Now. */
+  premium: boolean;
   price: string;
   currentMode?: SellMode;
 }) {
+  const locked = (mode: SellMode) => !premium && currentMode !== mode;
   const buyNowBlocked = !payoutsReady && currentMode !== "buy_now";
   const tooCheap = price !== "" && toCents(Number(price) || 0) < MIN_CHARGE_CENTS;
-  const option = (mode: SellMode, title: string, hint: string, disabled = false) => (
+  const option = (mode: SellMode, title: string, hint: string, disabled = false, lock = false) => (
     <label
       className={`flex items-start gap-2 border-2 rounded-lg px-3 py-2 cursor-pointer ${
         value === mode ? "border-ink bg-chalk" : "border-cardboard-dark/50 bg-white"
@@ -1311,7 +1360,9 @@ function SellModePicker({
         onChange={() => onChange(mode)}
       />
       <span>
-        <span className="block text-sm font-bold">{title}</span>
+        <span className="block text-sm font-bold">
+          {title} {lock && <LockedBadge className="ml-1 align-middle" />}
+        </span>
         <span className="block text-[11px] opacity-60">{hint}</span>
       </span>
     </label>
@@ -1321,10 +1372,16 @@ function SellModePicker({
       <div className="text-xs font-bold opacity-70 mb-1">How buyers get it</div>
       <div className="grid gap-2 sm:grid-cols-3">
         {option("in_person", SELL_MODE_LABELS.in_person, "No holds or online payment — buyers just show up")}
-        {option("hold", SELL_MODE_LABELS.hold, "Buyer reserves it, pays you in person")}
-        {option("buy_now", SELL_MODE_LABELS.buy_now, "Buyer pays online, picks up with a code", buyNowBlocked)}
+        {option("hold", SELL_MODE_LABELS.hold, "Buyer reserves it, pays you in person", locked("hold"), locked("hold"))}
+        {option(
+          "buy_now",
+          SELL_MODE_LABELS.buy_now,
+          "Buyer pays online, picks up with a code",
+          buyNowBlocked || locked("buy_now"),
+          locked("buy_now")
+        )}
       </div>
-      {buyNowBlocked && (
+      {buyNowBlocked && !locked("buy_now") && (
         <div className="text-[11px] opacity-60 mt-1">
           To use Buy Now,{" "}
           <a href="/dashboard/account" className="underline">

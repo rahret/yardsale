@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale, SaleDay } from "@/lib/types";
 import ShareButton from "@/components/ShareButton";
+import { LockedBadge } from "@/components/PlanOptions";
 import {
   POST_KINDS,
   SOURCE_LABELS,
@@ -24,6 +25,7 @@ export default function ShareSaleCard({
   days,
   onSaleChange,
   onShared,
+  canList = true,
 }: {
   sale: Sale;
   items: Item[];
@@ -31,6 +33,8 @@ export default function ShareSaleCard({
   onSaleChange: (sale: Sale) => void;
   /** The seller used any of the share tools. */
   onShared?: () => void;
+  /** The seller's plan includes Find yard sales (an existing listing can still be turned off). */
+  canList?: boolean;
 }) {
   const origin = siteOriginForClient();
   const [postKind, setPostKind] = useState<PostKind>("group");
@@ -179,14 +183,16 @@ export default function ShareSaleCard({
           type="checkbox"
           className="mt-1"
           checked={sale.listed}
-          disabled={savingAddress}
+          disabled={savingAddress || (!canList && !sale.listed)}
           onChange={(e) => toggleListed(e.target.checked)}
         />
         <span>
           List my sale in <strong>Find yard sales</strong> on the home page
+          {!canList && <LockedBadge className="ml-1.5 align-middle" />}
           <span className="block text-xs opacity-60">
-            Buyers searching your area can find it while it&apos;s Live. Listings show the street name, not your house
-            number.
+            {canList
+              ? "Buyers searching your area can find it while it's Live. Listings show the street name, not your house number."
+              : "Part of Pro and the Sale Pass: buyers searching your area can find your sale while it's Live."}
           </span>
           {sale.listed && sale.street?.trim() && sale.lat == null && (
             <span className="block text-xs font-semibold text-amber mt-0.5">

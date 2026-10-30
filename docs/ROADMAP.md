@@ -10,7 +10,7 @@ the sale is worth visiting.
 
 **Status key:** ✅ Done · 🟡 Partly done · ⬜ Not started
 
-_Last updated: 2026-10-28_
+_Last updated: 2026-10-30_
 
 ---
 
@@ -37,7 +37,8 @@ _Last updated: 2026-10-28_
     fallback), "within 5/10/25/50 miles" of a ZIP/city or **Use my location**, nearest first
     with distance on each card, a **Map** view (OpenStreetMap; pins rounded to ~a block when
     the house number is hidden), and server-side paging (24 at a time, Show more).
-  - _Still to do:_ promoted listings (paid) — needs a price and checkout decision.
+  - _Still to do:_ promoted listings (paid) — needs a price and checkout decision. Directory
+    listing itself is now part of Pro / the Sale Pass.
 - ⬜ **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
   Add arrow signs ("← YARD SALE, 2 blocks") with a small QR code, plus a quarter-page flyer
   for neighborhood boards.
@@ -133,18 +134,17 @@ _Last updated: 2026-10-28_
 
 ## 5. Monetization & payments
 
-- 🟡 **Subscriptions (seller plans).** _Proposed pricing (to confirm):_ **Free** — one active
-  sale, ~25 items, holds, QR sign, sharing, directory listing; **Pro $7.99/mo or $59/yr** —
-  unlimited sales/items, Buy Now with the platform fee waived, visit stats, more sign layouts,
-  future AI item entry and promoted listings; later maybe **Business ~$24.99/mo** for
-  estate-sale companies. A **7-day free trial (card required, cancel anytime)** is planned;
-  note many sales happen within a week, so consider limiting what the trial includes or
-  adding a one-time **Sale Pass (~$9.99 / 30 days)**. Account page shows the plan and an "Upgrade to Pro"
-  placeholder; `account_billing` table is ready (read-only to users, written by Stripe
-  webhooks).
-  - _To do:_ Stripe Checkout + customer billing portal, webhook to update `account_billing`,
-    decide plans/prices and which features are Pro (candidates: AI item entry, promoted
-    listing in "near me", seller stats, extra sign layouts).
+- ✅ **Subscriptions (seller plans).** No free tier.
+  - _Done (pending merge):_ **7-day free trial** of Pro (card required, cancel anytime) limited to
+    1 sale, 25 items and first come, first served — Holds, Buy Now, Find yard sales and more
+    sales/items stay visible with a 🔒 Pro badge. **Pro $7.99/mo or $59/yr** unlocks
+    everything; **Sale Pass $9.99** = everything for 30 days, paid once. Stripe Checkout,
+    customer portal (card, receipts, cancel), "Unlock everything now" (ends the trial early),
+    webhook sync, limits enforced in the database. Lapsed sellers keep their sales up but
+    can't add to them; holds/Buy Now/directory turn off. Complimentary accounts via SQL.
+  - _Still to do:_ maybe **Business ~$24.99/mo** for estate-sale companies; switching
+    monthly ↔ yearly in the portal (needs products in Stripe's catalog); Pro-only extras
+    (visit stats, extra sign layouts, AI item entry, promoted listings).
 - 🟡 **Help sellers take payment.** Sellers can save how buyers pay them (cash, Venmo,
   Cash App, PayPal, Zelle) on the Account page.
   - _Done (#16):_ each sale shows which methods it accepts, as icons only. Handles stay

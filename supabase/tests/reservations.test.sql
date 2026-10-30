@@ -5,6 +5,8 @@
 insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-000000000001', 'seller@example.com'),
   ('00000000-0000-0000-0000-000000000002', 'someone@example.com');
+-- sellers on Pro (holds and directory listings need a full plan)
+insert into public.account_billing (user_id, plan, subscription_status) values ('00000000-0000-0000-0000-000000000001', 'pro', 'active');
 insert into public.sales (id, owner_id, slug, status) values
   ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'test-sale', 'live');
 insert into public.items (id, sale_id, name)

@@ -157,7 +157,9 @@ Setup:
    (the receipt includes the pickup code).
 4. Add a webhook endpoint `https://<your site>/api/stripe/webhook` for
    `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
-   `checkout.session.async_payment_failed` and `checkout.session.expired`. Add a second
+   `checkout.session.async_payment_failed`, `checkout.session.expired` and (for seller plans)
+   `customer.subscription.created`, `customer.subscription.updated` and
+   `customer.subscription.deleted`. Add a second
    endpoint to the same URL that listens to **connected accounts** for `account.updated`.
 5. In Vercel, set these server-only variables:
    - `STRIPE_SECRET_KEY`
@@ -171,6 +173,58 @@ Setup:
 Without these variables the app still runs; Buy Now just reports that online payment isn't
 available. `npm test` includes payload checks against
 [stripe-mock](https://github.com/stripe/stripe-mock) when `STRIPE_MOCK_PORT` is set.
+
+## Seller plans (subscriptions)
+
+There's no free tier. Sellers choose one of:
+
+| Plan | Price | What's included |
+| --- | --- | --- |
+| **Free trial** of Pro | 7 days, card required, cancel anytime | 1 sale, up to 25 items, first come, first served only |
+| **Pro** | $7.99/month or $59/year | Unlimited sales and items, Holds, Buy Now, listing in Find yard sales |
+| **Sale Pass** | $9.99 once | Everything in Pro for 30 days; no subscription (a second pass adds 30 more days) |
+
+During the trial, the locked features (more sales or items, Holds, Buy Now, Find yard sales)
+are still shown, with a 🔒 Pro badge and a link to the plans. "Unlock everything now" on the
+Account page ends the trial early and charges the first period; if the card is declined,
+nothing changes. One trial per account.
+
+Without a plan (trial canceled, subscription ended, pass expired), the seller's sales stay up,
+but they can't add sales or items, their sales leave Find yard sales, and buyers see every
+item as first come, first served. A seller with a live subscription has to cancel it before
+deleting their account.
+
+How it fits together:
+
+- `public.seller_access(user)` in `schema.sql` decides `full` / `trial` / `none`; the app
+  mirrors it in `src/lib/billing.ts` (`accessFor`). Triggers on `sales` and `items` enforce
+  the limits for sellers' own writes, and `reserve_item`, `search_sales` and `/api/checkout`
+  check it too.
+- `/api/billing/checkout` (Stripe Checkout, subscription or one-time), `/api/billing/return`
+  (applies the result right away), `/api/billing/portal` (Stripe's customer portal: card,
+  receipts, cancel), `/api/billing/upgrade` (end the trial early).
+- The webhook keeps `account_billing` in sync from `customer.subscription.*` events and
+  records Sale Passes (`grant_sale_pass`, one row per Checkout in `sale_passes`).
+- Prices live in `src/lib/billing.ts` (`PRICES`); Checkout creates them on the fly, so there's
+  nothing to set up in Stripe's product catalog.
+- New sellers pick a plan on `/dashboard/welcome` before the setup wizard.
+
+Setup (in addition to the Buy Now setup below):
+
+1. Re-run `supabase/schema.sql`.
+2. Stripe Dashboard → Settings → Billing → **Customer portal**: activate it, and allow
+   customers to update payment methods, view invoices and cancel subscriptions.
+3. Add `customer.subscription.created`, `customer.subscription.updated` and
+   `customer.subscription.deleted` to the **first** (platform) webhook endpoint.
+4. Optional: Settings → Billing → Subscriptions and emails — turn on the trial-ending
+   reminder email and failed-payment emails.
+5. To give an account everything for free (yours, or a tester's), run in the SQL editor:
+
+   ```sql
+   insert into public.account_billing (user_id, plan)
+   select id, 'comp' from auth.users where email = 'you@example.com'
+   on conflict (user_id) do update set plan = 'comp';
+   ```
 
 ## Notes / things to customize
 

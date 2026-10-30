@@ -1,6 +1,7 @@
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { syncConnectAccount } from "./payouts";
+import { applyBillingCheckout, syncSubscription } from "./billingServer";
 
 /** Refunds a paid order through Stripe, pulling the money back from the
  * seller's transfer and returning the application fee, then records it. */
@@ -58,15 +59,24 @@ export async function handleStripeEvent(event: Stripe.Event, stripe: Stripe, adm
   switch (event.type) {
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded": {
-      return fulfillCheckoutSession(event.data.object as Stripe.Checkout.Session, stripe, admin);
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (isBillingSession(session)) return applyBillingCheckout(session, stripe, admin);
+      return fulfillCheckoutSession(session, stripe, admin);
     }
 
     case "checkout.session.expired":
     case "checkout.session.async_payment_failed": {
       const session = event.data.object as Stripe.Checkout.Session;
+      if (isBillingSession(session)) return "ignored";
       const orderId = session.metadata?.order_id || session.client_reference_id;
       if (orderId) await admin.from("orders").update({ status: "expired" }).eq("id", orderId).eq("status", "pending");
       return "expired";
+    }
+
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted": {
+      return syncSubscription(admin, event.data.object as Stripe.Subscription);
     }
 
     case "account.updated": {
@@ -77,4 +87,9 @@ export async function handleStripeEvent(event: Stripe.Event, stripe: Stripe, adm
     default:
       return "ignored";
   }
+}
+
+/** A seller paying us (subscription or Sale Pass), not a buyer's Buy Now. */
+function isBillingSession(session: Stripe.Checkout.Session): boolean {
+  return session.metadata?.kind === "subscription" || session.metadata?.kind === "sale_pass";
 }

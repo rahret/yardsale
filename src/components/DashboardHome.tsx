@@ -5,6 +5,8 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Sale } from "@/lib/types";
 import { randomSuffix, slugify } from "@/lib/utils";
+import { type Access, TRIAL_LIMITS, UPGRADE_HREF } from "@/lib/billing";
+import { LockedBadge, UpgradeNote } from "@/components/PlanOptions";
 
 const STATUS_LABEL: Record<Sale["status"], { label: string; cls: string }> = {
   draft: { label: "Draft", cls: "bg-cardboard-dark/20 text-ink" },
@@ -15,9 +17,11 @@ const STATUS_LABEL: Record<Sale["status"], { label: string; cls: string }> = {
 export default function DashboardHome({
   initialSales,
   displayName,
+  access,
 }: {
   initialSales: Sale[];
   displayName?: string;
+  access: Access;
 }) {
   const router = useRouter();
   const [sales, setSales] = useState<Sale[]>(initialSales);
@@ -25,6 +29,7 @@ export default function DashboardHome({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const canCreate = access === "full" || (access === "trial" && sales.length < TRIAL_LIMITS.sales);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -71,6 +76,15 @@ export default function DashboardHome({
           <a href="/dashboard/welcome" className="inline-block bg-grass text-white font-bold px-6 py-3 rounded-lg shadow-tag">
             Start setup — about 2 minutes
           </a>
+        </div>
+      )}
+
+      {access === "none" && sales.length > 0 && (
+        <div className="mb-4">
+          <UpgradeNote>
+            You don&apos;t have a plan right now. Your sales stay up, but you can&apos;t add sales or items, and
+            Holds, Buy Now and Find yard sales are off.
+          </UpgradeNote>
         </div>
       )}
 
@@ -121,14 +135,34 @@ export default function DashboardHome({
             </button>
           </div>
         </form>
-      ) : (
+      ) : canCreate ? (
         <button
           onClick={() => setCreating(true)}
           className="bg-ink text-chalk font-bold px-5 py-3 rounded-lg shadow-tag"
         >
           + Create new sale
         </button>
-      )}
+      ) : sales.length > 0 ? (
+        <div>
+          <div className="flex items-center gap-2">
+            <button
+              disabled
+              className="bg-ink text-chalk font-bold px-5 py-3 rounded-lg shadow-tag opacity-40 cursor-not-allowed"
+            >
+              + Create new sale
+            </button>
+            <LockedBadge />
+          </div>
+          <p className="text-xs opacity-70 mt-2">
+            {access === "trial"
+              ? `Your free trial includes ${TRIAL_LIMITS.sales} sale. `
+              : "Choose a plan to create more sales. "}
+            <a href={UPGRADE_HREF} className="font-bold underline">
+              See plans
+            </a>
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { accessFor } from "@/lib/billing";
 import SaleAdmin from "@/components/SaleAdmin";
 import { ITEM_SELECT } from "@/lib/utils";
 
@@ -45,7 +46,7 @@ export default async function SaleAdminPage({
   // the seller's own payout status (RLS: owners can read their billing row)
   const { data: billing } = await supabase
     .from("account_billing")
-    .select("connect_charges_enabled")
+    .select("*")
     .eq("user_id", sale.owner_id)
     .maybeSingle();
 
@@ -66,6 +67,7 @@ export default async function SaleAdminPage({
       payoutsReady={!!billing?.connect_charges_enabled}
       initialOrders={orders || []}
       justCreated={searchParams.welcome === "1"}
+      access={accessFor(billing)}
     />
   );
 }

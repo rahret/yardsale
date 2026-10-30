@@ -27,14 +27,21 @@ export default function ShopView({
   initialItems,
   saleDays,
   initialItemId,
+  holdsAndBuyNow = true,
 }: {
   sale: Sale;
   initialItems: Item[];
   saleDays: SaleDay[];
   /** Opens this item's detail sheet on load (from a shared item link). */
   initialItemId?: string;
+  /** The seller's plan includes Holds and Buy Now; without it, every item is first come, first served. */
+  holdsAndBuyNow?: boolean;
 }) {
-  const [items, setItems] = useState<Item[]>(initialItems);
+  const [rawItems, setItems] = useState<Item[]>(initialItems);
+  const items = useMemo(
+    () => (holdsAndBuyNow ? rawItems : rawItems.map((i) => ({ ...i, sell_mode: "in_person" as const }))),
+    [rawItems, holdsAndBuyNow]
+  );
   const [filterCats, setFilterCats] = useState<string[]>([]);
   const [sort, setSort] = useState<SortKey>("newest");
   const [showSold, setShowSold] = useState(false);

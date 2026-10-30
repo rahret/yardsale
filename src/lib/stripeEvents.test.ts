@@ -89,6 +89,108 @@ describe("handleStripeEvent", () => {
   });
 });
 
+describe("handleStripeEvent — seller billing", () => {
+  function fakeBillingAdmin(row: Record<string, unknown> | null = null) {
+    const upserts: Record<string, unknown>[] = [];
+    const rpc = vi.fn(async () => ({ data: "2026-11-29T00:00:00Z", error: null }));
+    const admin = {
+      rpc,
+      from: () => {
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          update: () => chain,
+          maybeSingle: async () => ({ data: row, error: null }),
+          upsert: async (values: Record<string, unknown>) => {
+            upserts.push(values);
+            return { error: null };
+          },
+          then: (resolve: (v: unknown) => void) => resolve({ data: null, error: null }),
+        };
+        return chain;
+      },
+    };
+    return { admin, rpc, upserts };
+  }
+  const subscription = (over: Record<string, unknown> = {}) => ({
+    id: "sub_1",
+    customer: "cus_1",
+    status: "trialing",
+    metadata: { user_id: "user-1" },
+    current_period_end: 1793000000,
+    cancel_at_period_end: false,
+    trial_start: 1792400000,
+    trial_end: 1793000000,
+    items: { data: [{ price: { recurring: { interval: "month" } } }] },
+    ...over,
+  });
+  const event = (type: string, object: unknown) => ({ id: "evt_b", type, data: { object } }) as unknown as Stripe.Event;
+
+  it("grants a Sale Pass once paid, without touching orders", async () => {
+    const { admin, rpc } = fakeBillingAdmin();
+    const { stripe } = fakeStripe();
+    const session = { id: "cs_pass", payment_status: "paid", amount_total: 999, metadata: { kind: "sale_pass", user_id: "user-1" } };
+    expect(await handleStripeEvent(event("checkout.session.completed", session), stripe, admin as never)).toBe(
+      "sale pass granted"
+    );
+    expect(rpc).toHaveBeenCalledWith("grant_sale_pass", {
+      p_user: "user-1",
+      p_session: "cs_pass",
+      p_amount_cents: 999,
+      p_days: 30,
+    });
+    expect(rpc).not.toHaveBeenCalledWith("complete_order", expect.anything());
+  });
+
+  it("ignores expired billing checkouts", async () => {
+    const { admin, upserts } = fakeBillingAdmin();
+    const { stripe } = fakeStripe();
+    const session = { id: "cs_sub", metadata: { kind: "subscription", user_id: "user-1" } };
+    expect(await handleStripeEvent(event("checkout.session.expired", session), stripe, admin as never)).toBe("ignored");
+    expect(upserts).toEqual([]);
+  });
+
+  it("records subscription changes", async () => {
+    const { admin, upserts } = fakeBillingAdmin({ user_id: "user-1", plan: "none" });
+    const { stripe } = fakeStripe();
+    expect(
+      await handleStripeEvent(event("customer.subscription.created", subscription()), stripe, admin as never)
+    ).toBe("subscription trialing");
+    expect(upserts[0]).toMatchObject({
+      user_id: "user-1",
+      stripe_customer_id: "cus_1",
+      plan: "pro",
+      subscription_status: "trialing",
+      trial_used: true,
+    });
+  });
+
+  it("keeps complimentary accounts on their plan", async () => {
+    const { admin, upserts } = fakeBillingAdmin({ user_id: "user-1", plan: "comp" });
+    const { stripe } = fakeStripe();
+    await handleStripeEvent(event("customer.subscription.deleted", subscription({ status: "canceled" })), stripe, admin as never);
+    expect(upserts[0]).toMatchObject({ plan: "comp", subscription_status: "canceled" });
+  });
+
+  it("doesn't let an old subscription ending wipe out a newer one", async () => {
+    const { admin, upserts } = fakeBillingAdmin({
+      user_id: "user-1",
+      plan: "pro",
+      stripe_subscription_id: "sub_new",
+      subscription_status: "active",
+    });
+    const { stripe } = fakeStripe();
+    expect(
+      await handleStripeEvent(
+        event("customer.subscription.deleted", subscription({ id: "sub_old", status: "canceled" })),
+        stripe,
+        admin as never
+      )
+    ).toBe("stale subscription ignored");
+    expect(upserts).toEqual([]);
+  });
+});
+
 describe("webhook signatures", () => {
   // the same check the webhook route runs on every request
   const stripe = new Stripe("sk_test_dummy");

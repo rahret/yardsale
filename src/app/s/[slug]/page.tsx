@@ -66,11 +66,14 @@ export default async function PublicSalePage({ params, searchParams }: Props) {
   // cached items above may predate the sweep, so refetch if anything expired
   const supabase = createClient();
   await supabase.rpc("sweep_expired_reservations", { p_sale_id: found.sale.id });
-  const { data: items } = await supabase
-    .from("items")
-    .select("*, item_photos(*)")
-    .eq("sale_id", found.sale.id)
-    .order("created_at", { ascending: false });
+  const [{ data: items }, { data: access }] = await Promise.all([
+    supabase
+      .from("items")
+      .select("*, item_photos(*)")
+      .eq("sale_id", found.sale.id)
+      .order("created_at", { ascending: false }),
+    supabase.rpc("seller_access", { p_user: found.sale.owner_id }),
+  ]);
 
   return (
     <>
@@ -80,6 +83,7 @@ export default async function PublicSalePage({ params, searchParams }: Props) {
         initialItems={items || found.items}
         saleDays={found.days}
         initialItemId={searchParams.item}
+        holdsAndBuyNow={access === "full"}
       />
     </>
   );
