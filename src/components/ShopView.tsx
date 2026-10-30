@@ -184,7 +184,7 @@ export default function ShopView({
 
 function EmptyScreen({ title, body }: { title: string; body: string }) {
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 text-center">
+    <div className="min-h-[70vh] flex items-center justify-center px-4 text-center">
       <div>
         <div className="font-marker text-3xl text-marker mb-2">{title}</div>
         <p className="opacity-70 text-sm">{body}</p>
