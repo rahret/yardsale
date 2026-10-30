@@ -49,6 +49,25 @@ src/components/ShopView.tsx  Public shop UI logic (browse, filter, reserve, coun
 src/components/PhotoUploader.tsx  Drag-and-drop multi-photo upload to Supabase Storage.
 ```
 
+## Find yard sales (buyer search)
+
+`/find` lists live sales whose sellers ticked **List my sale** (existing sales start unlisted).
+
+- **Search** runs in the database (`search_sales()`): place/radius, dates, words (name,
+  street name — never the house number — city, state, ZIP prefix) and category, 24 at a time
+  with **Show more**. `/api/sales/search` serves later pages.
+- **Distance:** each sale's address is turned into map coordinates (`sales.lat/lng`) when the
+  seller saves it (`/api/sales/[id]/geocode`; older sales are done the next time the seller
+  opens their sale). Lookups use the free **US Census Bureau geocoder**, falling back to
+  **OpenStreetMap Nominatim**. Buyers can type a ZIP or city (`/api/geocode`, Nominatim,
+  cached and spaced 1 s apart per its usage policy) or tap **Use my location**, then pick
+  5 / 10 / 25 / 50 miles. A place that can't be found falls back to word matching.
+- **Map view:** Leaflet with OpenStreetMap tiles (no API key; attribution shown). Pins for
+  sales that hide the house number are rounded to about a block (~200 m).
+- No keys or accounts are needed for any of this. For heavy traffic, OpenStreetMap's free tile
+  and Nominatim services ask you to move to a paid provider (e.g. MapTiler, Stadia Maps) —
+  swap the tile URL in `SalesMap.tsx` and the lookup in `src/lib/geocode.ts`.
+
 ## Sharing & link previews
 
 - **Link previews:** `/s/[slug]` sets Open Graph / Twitter tags (title with dates, top

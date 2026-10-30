@@ -22,6 +22,9 @@ export interface Sale extends Address {
   timezone: string | null;
   /** Short buyer-facing note, e.g. "Everything half off after noon". */
   note: string;
+  /** Map coordinates of the address (null until geocoded). */
+  lat: number | null;
+  lng: number | null;
   /** Shown in the public "Find yard sales" directory (when live). */
   listed: boolean;
   /** Payment methods shown to buyers as icons (never the seller's handles). */

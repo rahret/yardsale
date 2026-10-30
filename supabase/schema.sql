@@ -155,6 +155,11 @@ alter table public.sales add constraint sales_accepted_payments_check
 alter table public.sales add column if not exists listed boolean not null default false;
 alter table public.sales alter column listed set default true;
 
+-- map coordinates of the sale's address, looked up (geocoded) by the server
+-- when the seller saves it; used for "within N miles" search and the map
+alter table public.sales add column if not exists lat double precision;
+alter table public.sales add column if not exists lng double precision;
+
 -- a sale-wide "Buy Now" switch was tried; Buy Now is now chosen per item
 -- (items.sell_mode)
 alter table public.sales drop column if exists buy_now_enabled;
@@ -594,6 +599,67 @@ end;
 $$;
 
 grant execute on function public.log_sale_visit(uuid, text, uuid) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- search_sales: the "Find yard sales" directory. Returns one page of listed,
+-- live sales that have a sale day in [p_from, p_to], optionally within
+-- p_radius_miles of (p_lat, p_lng), matching every word of p_query (name,
+-- street name — never the house number — city, state, ZIP) and selling
+-- something in p_category. Nearest first when a location is given, otherwise
+-- soonest first. total = matches across all pages. Runs as the caller, so it
+-- only sees what the public can see anyway.
+-- ----------------------------------------------------------------------------
+create or replace function public.search_sales(
+  p_lat double precision default null,
+  p_lng double precision default null,
+  p_radius_miles double precision default null,
+  p_from date default null,
+  p_to date default null,
+  p_query text default null,
+  p_category text default null,
+  p_limit int default 24,
+  p_offset int default 0
+)
+returns table (sale_id uuid, distance_miles double precision, next_date date, total bigint)
+language sql
+stable
+security invoker set search_path = public
+as $$
+  with candidates as (
+    select
+      s.id,
+      (select min(d.date) from public.sale_days d
+        where d.sale_id = s.id
+          and d.date >= coalesce(p_from, current_date - 1)
+          and d.date <= coalesce(p_to, 'infinity'::date)) as next_date,
+      case when p_lat is not null and p_lng is not null and s.lat is not null and s.lng is not null then
+        -- great-circle distance in miles (haversine)
+        3958.8 * 2 * asin(least(1, sqrt(
+          power(sin(radians(s.lat - p_lat) / 2), 2)
+          + cos(radians(p_lat)) * cos(radians(s.lat)) * power(sin(radians(s.lng - p_lng) / 2), 2))))
+      end as distance,
+      lower(concat_ws(' ', s.name, regexp_replace(s.street, '^\s*\d+[[:alnum:]/-]*\s+', ''), s.city, s.state, s.zip)) as haystack
+    from public.sales s
+    where s.status = 'live'
+      and s.listed
+      and (p_category is null or exists (
+        select 1 from public.items i
+        where i.sale_id = s.id and i.status <> 'sold' and lower(i.category) = lower(p_category)))
+  )
+  select c.id, c.distance, c.next_date, count(*) over ()
+  from candidates c
+  where c.next_date is not null
+    and (p_radius_miles is null or p_lat is null or (c.distance is not null and c.distance <= p_radius_miles))
+    and not exists (
+      select 1 from unnest(regexp_split_to_array(lower(trim(coalesce(p_query, ''))), '[\s,]+')) w
+      where w <> '' and position(w in c.haystack) = 0)
+  order by case when p_lat is not null then c.distance end nulls last, c.next_date, c.id
+  limit least(greatest(p_limit, 1), 100)
+  offset greatest(p_offset, 0);
+$$;
+
+grant execute on function public.search_sales(double precision, double precision, double precision, date, date, text, text, int, int)
+  to anon, authenticated, service_role;
 
 -- visit totals per source for the seller's dashboard
 create or replace function public.sale_visit_counts(p_sale_id uuid)

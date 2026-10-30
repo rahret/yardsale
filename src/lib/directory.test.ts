@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Item, Sale, SaleDay } from "./types";
-import { dateRange, matchesDates, matchesQuery, popularCategories, toListing } from "./directory";
+import { dateRange, popularCategories, toListing } from "./directory";
 
 const sale = {
   slug: "big-big-sale",
@@ -39,28 +39,10 @@ describe("toListing", () => {
     expect(l.categories).toEqual(["Furniture", "Tools"]);
     expect(l.itemCount).toBe(3);
     expect(l.photos).toHaveLength(1);
-    expect(l.search).not.toContain("5009");
   });
 
   it("drops sales whose days are all over", () => {
     expect(toListing(sale, days, items, new Date("2026-11-05T15:00:00Z"))).toBeNull();
-  });
-});
-
-describe("matchesQuery", () => {
-  const l = toListing(sale, days, items, wed)!;
-  it.each([
-    ["ankeny", true],
-    ["Ankeny, IA", true],
-    ["500", true], // ZIP prefix
-    ["50023", true],
-    ["furniture", true],
-    ["nw 4th", true],
-    ["5009", false], // house number isn't searchable
-    ["des moines", false],
-    ["", true],
-  ])("%s → %s", (q, want) => {
-    expect(matchesQuery(l, q)).toBe(want);
   });
 });
 
@@ -70,13 +52,6 @@ describe("dates", () => {
     expect(dateRange("weekend", "2026-10-31")).toEqual(["2026-10-31", "2026-11-01"]); // Sat
     expect(dateRange("weekend", "2026-11-01")).toEqual(["2026-11-01", "2026-11-01"]); // Sun
     expect(dateRange("week", "2026-10-28")).toEqual(["2026-10-28", "2026-11-03"]);
-  });
-  it("filters listings by date", () => {
-    const l = toListing(sale, days, items, wed)!;
-    expect(matchesDates(l, "today", "2026-10-28")).toBe(false);
-    expect(matchesDates(l, "weekend", "2026-10-28")).toBe(true);
-    expect(matchesDates(l, "week", "2026-10-28")).toBe(true);
-    expect(matchesDates(l, "any", "2026-10-28")).toBe(true);
   });
 });
 
