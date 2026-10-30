@@ -338,9 +338,10 @@ function GettingPaidSection({
           </div>
         </div>
         {cardsReady ? (
-          <form action="/api/stripe/dashboard" method="post">
+          <form action="/api/stripe/dashboard" method="post" target="_blank" rel="noopener noreferrer">
+            {/* Stripe's dashboard has no good way back here, so open it in a new tab */}
             <button type="submit" className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm">
-              View payouts
+              View payouts ↗
             </button>
           </form>
         ) : (
