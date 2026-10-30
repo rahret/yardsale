@@ -2,7 +2,7 @@ import type { Item, Sale, SaleDay } from "./types";
 import { formatSignTime, money, siteOrigin } from "./utils";
 
 /** Where a visitor came from — appended to shared links as `?src=…`. */
-export const SHARE_SOURCES = ["qr", "share", "facebook", "group", "craigslist", "text", "email", "friend"] as const;
+export const SHARE_SOURCES = ["qr", "share", "facebook", "group", "craigslist", "text", "email", "friend", "directory"] as const;
 export type ShareSource = (typeof SHARE_SOURCES)[number];
 
 export const SOURCE_LABELS: Record<string, string> = {
@@ -14,6 +14,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   text: "Text messages",
   email: "Email",
   friend: "Shared by buyers",
+  directory: "Find yard sales (home page)",
   direct: "Direct / other",
 };
 

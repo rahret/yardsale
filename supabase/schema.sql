@@ -149,6 +149,12 @@ alter table public.sales drop constraint if exists sales_accepted_payments_check
 alter table public.sales add constraint sales_accepted_payments_check
   check (accepted_payments <@ array['cash', 'card', 'venmo', 'cashapp', 'paypal', 'zelle']::text[]);
 
+-- whether a live sale appears in the public "Find yard sales" directory on the
+-- home page. Sales that existed before the directory start unlisted (nothing
+-- becomes searchable without the seller agreeing); new sales start listed.
+alter table public.sales add column if not exists listed boolean not null default false;
+alter table public.sales alter column listed set default true;
+
 -- a sale-wide "Buy Now" switch was tried; Buy Now is now chosen per item
 -- (items.sell_mode)
 alter table public.sales drop column if exists buy_now_enabled;
@@ -573,7 +579,7 @@ as $$
 declare
   v_src text := lower(coalesce(p_src, ''));
 begin
-  if v_src not in ('qr', 'share', 'facebook', 'group', 'craigslist', 'text', 'email', 'friend') then
+  if v_src not in ('qr', 'share', 'facebook', 'group', 'craigslist', 'text', 'email', 'friend', 'directory') then
     v_src := 'direct';
   end if;
   insert into public.sale_visits (sale_id, item_id, src)
