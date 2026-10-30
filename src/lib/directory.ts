@@ -1,5 +1,5 @@
 import type { Item, Sale, SaleDay } from "./types";
-import { currentDays, forSaleItems, publicLocation, publicPhotoUrl, streetName, topCategories } from "./share";
+import { currentDays, forSaleItems, publicLocation, publicPhotoUrl, topCategories } from "./share";
 
 type Day = Pick<SaleDay, "date" | "start_time" | "end_time">;
 
@@ -16,8 +16,14 @@ export interface Listing {
   categories: string[];
   itemCount: number;
   photos: string[];
-  search: string; // lower-cased text the search box matches against
+  /** Miles from the buyer's chosen location, when they set one. */
+  distanceMiles?: number | null;
+  /** Map position (rounded to about a block unless the seller shows their full address). */
+  coords?: { lat: number; lng: number } | null;
 }
+
+export const PAGE_SIZE = 24;
+export const RADIUS_OPTIONS = [5, 10, 25, 50] as const;
 
 /** Builds a listing from a sale and its days/items, or null if the sale has
  * no days left (it shouldn't appear in "upcoming"). */
@@ -52,17 +58,7 @@ export function toListing(
     categories,
     itemCount: unsold.length,
     photos,
-    search: [sale.name, sale.tagline, streetName(sale.street), sale.city, sale.state, sale.zip, ...topCategories(items, 20)]
-      .join(" ")
-      .toLowerCase(),
   };
-}
-
-/** Every word typed must appear somewhere (name, street, city, state, ZIP,
- * categories). A number matches ZIPs by prefix ("500" finds 50023). */
-export function matchesQuery(listing: Listing, query: string): boolean {
-  const words = query.toLowerCase().split(/[\s,]+/).filter(Boolean);
-  return words.every((w) => (/^\d+$/.test(w) ? listing.zip.startsWith(w) || listing.search.includes(w) : listing.search.includes(w)));
 }
 
 export type DateFilter = "any" | "today" | "weekend" | "week";
@@ -84,12 +80,6 @@ export function dateRange(filter: DateFilter, today: string): [string, string] |
   if (dow === 0) return [today, today];
   if (dow === 6) return [today, addDays(today, 1)];
   return [addDays(today, 6 - dow), addDays(today, 7 - dow)];
-}
-
-export function matchesDates(listing: Listing, filter: DateFilter, today: string): boolean {
-  const range = dateRange(filter, today);
-  if (!range) return true;
-  return listing.days.some((d) => d.date >= range[0] && d.date <= range[1]);
 }
 
 /** Category chips: the most common categories across listings. */

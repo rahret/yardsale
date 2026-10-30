@@ -33,9 +33,11 @@ _Last updated: 2026-10-28_
     Today / This weekend / Next 7 days and category; cards with photos, open status, street
     (no house number) and top categories. **New Sellers → `/sell`:** benefits and Get started.
     Sellers opt in with "List my sale" (existing sales start unlisted; new sales start listed).
-  - _Still to do:_ map coordinates for each sale (geocoding) so buyers can search "within
-    N miles" and use their location; a map view; paging when there are many sales;
-    promoted listings (paid).
+  - _Done (pending merge):_ map coordinates for each sale (US Census geocoder, OpenStreetMap
+    fallback), "within 5/10/25/50 miles" of a ZIP/city or **Use my location**, nearest first
+    with distance on each card, a **Map** view (OpenStreetMap; pins rounded to ~a block when
+    the house number is hidden), and server-side paging (24 at a time, Show more).
+  - _Still to do:_ promoted listings (paid) — needs a price and checkout decision.
 - ⬜ **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
   Add arrow signs ("← YARD SALE, 2 blocks") with a small QR code, plus a quarter-page flyer
   for neighborhood boards.

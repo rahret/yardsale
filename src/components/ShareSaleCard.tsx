@@ -180,6 +180,12 @@ export default function ShareSaleCard({
             Buyers searching your area can find it while it&apos;s Live. Listings show the street name, not your house
             number.
           </span>
+          {sale.listed && sale.street?.trim() && sale.lat == null && (
+            <span className="block text-xs font-semibold text-amber mt-0.5">
+              We couldn&apos;t place your address on the map yet, so distance searches won&apos;t find it. Check the
+              address in Sale details and save again.
+            </span>
+          )}
         </span>
       </label>
 

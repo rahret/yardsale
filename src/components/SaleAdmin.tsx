@@ -116,6 +116,12 @@ export default function SaleAdmin({
     [dayRows]
   );
 
+  // sales saved before map coordinates existed: look them up once
+  useEffect(() => {
+    if (sale.street?.trim() && sale.lat == null) locateSale();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Print content is portaled onto <body> (outside the app's layout tree) so
   // printing it doesn't leave the rest of the (visually hidden but still
   // space-occupying) dashboard page around to generate extra blank pages.
@@ -236,7 +242,25 @@ export default function SaleAdmin({
     setDayRows(toDayRows(savedDays));
 
     setSavingSale(false);
-    if (!error && data) setSale(data);
+    if (!error && data) {
+      setSale(data);
+      const addressChanged = ["street", "city", "state", "zip"].some(
+        (k) => (data as Record<string, unknown>)[k] !== (sale as unknown as Record<string, unknown>)[k]
+      );
+      if (addressChanged || data.lat == null) locateSale();
+    }
+  }
+
+  /** Looks up the address's map coordinates (for "within N miles" search and
+   * the map). Runs in the background; the page doesn't wait for it. */
+  async function locateSale() {
+    try {
+      const res = await fetch(`/api/sales/${sale.id}/geocode`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.sale) setSale(body.sale);
+    } catch {
+      // try again next time the address is saved
+    }
   }
 
   function selectSavedLocation(loc: SavedLocation) {

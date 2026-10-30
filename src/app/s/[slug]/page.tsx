@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import ShopView from "@/components/ShopView";
+import SiteHeader from "@/components/SiteHeader";
+import { isSignedIn } from "@/lib/currentUser";
 import { loadPublicSale, previewVersion, requestOrigin } from "@/lib/saleData";
 import { itemPreview, salePreview } from "@/lib/share";
 
@@ -42,16 +44,21 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
 }
 
 export default async function PublicSalePage({ params, searchParams }: Props) {
-  const found = await loadPublicSale(params.slug);
+  const [found, signedIn] = await Promise.all([loadPublicSale(params.slug), isSignedIn()]);
 
   if (!found) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 text-center">
-        <div>
-          <div className="font-marker text-3xl text-marker mb-2">Sale not found</div>
-          <p className="opacity-70 text-sm">This link doesn&apos;t match any garage sale. Double-check the URL or QR code.</p>
+      <>
+        <SiteHeader signedIn={signedIn} />
+        <div className="min-h-[70vh] flex items-center justify-center px-4 text-center">
+          <div>
+            <div className="font-marker text-3xl text-marker mb-2">Sale not found</div>
+            <p className="opacity-70 text-sm">
+              This link doesn&apos;t match any garage sale. Double-check the URL or QR code.
+            </p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -66,11 +73,14 @@ export default async function PublicSalePage({ params, searchParams }: Props) {
     .order("created_at", { ascending: false });
 
   return (
-    <ShopView
-      sale={found.sale}
-      initialItems={items || found.items}
-      saleDays={found.days}
-      initialItemId={searchParams.item}
-    />
+    <>
+      <SiteHeader signedIn={signedIn} />
+      <ShopView
+        sale={found.sale}
+        initialItems={items || found.items}
+        saleDays={found.days}
+        initialItemId={searchParams.item}
+      />
+    </>
   );
 }
