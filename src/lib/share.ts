@@ -201,6 +201,8 @@ export function salePost(
   const where = publicLocation(sale);
   const cats = topCategories(items, 5);
   const count = forSaleItems(items).length;
+  // only promise holds / online buying when some item actually offers it
+  const canClaim = forSaleItems(items).some((i) => i.quantity_total === 1 && i.sell_mode !== "in_person");
   const highlights = cats.length > 0 ? cats.join(", ") : null;
 
   if (kind === "text") {
@@ -223,8 +225,12 @@ export function salePost(
     sale.tagline || null,
     "",
     kind === "craigslist"
-      ? `Photos and prices for everything, plus hold an item before you come: ${link}`
-      : `👉 Browse photos and prices, and reserve items before you come: ${link}`,
+      ? canClaim
+        ? `Photos and prices for everything, plus hold an item before you come: ${link}`
+        : `Photos and prices for everything: ${link}`
+      : canClaim
+        ? `👉 Browse photos and prices, and reserve items before you come: ${link}`
+        : `👉 Browse photos and prices before you come: ${link}`,
   ];
   // collapse the blank lines left by missing sections
   return body

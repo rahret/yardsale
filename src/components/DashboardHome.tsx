@@ -5,6 +5,8 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Sale } from "@/lib/types";
 import { randomSuffix, slugify } from "@/lib/utils";
+import { type Access, TRIAL_LIMITS, UPGRADE_HREF } from "@/lib/billing";
+import { LockedBadge, UpgradeNote } from "@/components/PlanOptions";
 
 const STATUS_LABEL: Record<Sale["status"], { label: string; cls: string }> = {
   draft: { label: "Draft", cls: "bg-cardboard-dark/20 text-ink" },
@@ -15,9 +17,11 @@ const STATUS_LABEL: Record<Sale["status"], { label: string; cls: string }> = {
 export default function DashboardHome({
   initialSales,
   displayName,
+  access,
 }: {
   initialSales: Sale[];
   displayName?: string;
+  access: Access;
 }) {
   const router = useRouter();
   const [sales, setSales] = useState<Sale[]>(initialSales);
@@ -25,6 +29,7 @@ export default function DashboardHome({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const canCreate = access === "full" || (access === "trial" && sales.length < TRIAL_LIMITS.sales);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -62,9 +67,24 @@ export default function DashboardHome({
       </div>
 
       {sales.length === 0 && !creating && (
-        <div className="border-2 border-dashed border-cardboard-dark rounded-xl p-8 text-center opacity-75 mb-6">
-          <span className="font-marker text-xl text-marker block mb-2">no sales yet!</span>
-          Create your first garage sale to get a shareable link and QR code.
+        <div className="bg-white border-2 border-cardboard-dark rounded-xl p-6 text-center shadow-tag mb-6">
+          <div className="text-4xl mb-1">🏷️</div>
+          <span className="font-marker text-2xl text-marker block mb-1">Let&apos;s set up your first sale</span>
+          <p className="text-sm opacity-75 mb-4">
+            Three quick steps — name, address and dates — then add items, print your QR sign and share it.
+          </p>
+          <a href="/dashboard/welcome" className="inline-block bg-grass text-white font-bold px-6 py-3 rounded-lg shadow-tag">
+            Start setup — about 2 minutes
+          </a>
+        </div>
+      )}
+
+      {access === "none" && sales.length > 0 && (
+        <div className="mb-4">
+          <UpgradeNote>
+            You don&apos;t have a plan right now. Your sales stay up, but you can&apos;t add sales or items, and
+            Holds, Buy Now and Find yard sales are off.
+          </UpgradeNote>
         </div>
       )}
 
@@ -115,14 +135,34 @@ export default function DashboardHome({
             </button>
           </div>
         </form>
-      ) : (
+      ) : canCreate ? (
         <button
           onClick={() => setCreating(true)}
           className="bg-ink text-chalk font-bold px-5 py-3 rounded-lg shadow-tag"
         >
           + Create new sale
         </button>
-      )}
+      ) : sales.length > 0 ? (
+        <div>
+          <div className="flex items-center gap-2">
+            <button
+              disabled
+              className="bg-ink text-chalk font-bold px-5 py-3 rounded-lg shadow-tag opacity-40 cursor-not-allowed"
+            >
+              + Create new sale
+            </button>
+            <LockedBadge />
+          </div>
+          <p className="text-xs opacity-70 mt-2">
+            {access === "trial"
+              ? `Your free trial includes ${TRIAL_LIMITS.sales} sale. `
+              : "Choose a plan to create more sales. "}
+            <a href={UPGRADE_HREF} className="font-bold underline">
+              See plans
+            </a>
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

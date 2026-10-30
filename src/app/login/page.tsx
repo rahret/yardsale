@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { safeRedirectPath } from "@/lib/utils";
 
 export default function LoginPage() {
   return (
@@ -32,7 +33,7 @@ function LoginForm() {
       setError(error.message);
       return;
     }
-    router.push(searchParams.get("redirectTo") || "/dashboard");
+    router.push(safeRedirectPath(searchParams.get("redirectTo")));
     router.refresh();
   }
 

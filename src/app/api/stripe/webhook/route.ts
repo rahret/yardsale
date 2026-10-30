@@ -7,7 +7,9 @@ import { handleStripeEvent } from "@/lib/stripeEvents";
 // account status). Every request is verified with STRIPE_WEBHOOK_SECRET.
 // Subscribe the endpoint to: checkout.session.completed,
 // checkout.session.async_payment_succeeded, checkout.session.async_payment_failed,
-// checkout.session.expired, and (for connected accounts) account.updated.
+// checkout.session.expired, customer.subscription.created,
+// customer.subscription.updated, customer.subscription.deleted, and (for
+// connected accounts) account.updated.
 export async function POST(request: NextRequest) {
   const stripe = getStripe();
   const admin = createAdminClient();

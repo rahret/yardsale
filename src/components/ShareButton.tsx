@@ -10,16 +10,20 @@ export default function ShareButton({
   text,
   label = "Share",
   className = "",
+  onShare,
 }: {
   url: string;
   title: string;
   text?: string;
   label?: string;
   className?: string;
+  /** Called when the button is used (e.g. to tick a checklist step). */
+  onShare?: () => void;
 }) {
   const [note, setNote] = useState("");
 
   async function share() {
+    onShare?.();
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({ url, title, text });

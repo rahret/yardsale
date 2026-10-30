@@ -1,11 +1,18 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { accessFor } from "@/lib/billing";
 import SaleAdmin from "@/components/SaleAdmin";
 import { ITEM_SELECT } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-export default async function SaleAdminPage({ params }: { params: { saleId: string } }) {
+export default async function SaleAdminPage({
+  params,
+  searchParams,
+}: {
+  params: { saleId: string };
+  searchParams: { welcome?: string };
+}) {
   const supabase = createClient();
 
   const { data: sale } = await supabase.from("sales").select("*").eq("id", params.saleId).single();
@@ -39,7 +46,7 @@ export default async function SaleAdminPage({ params }: { params: { saleId: stri
   // the seller's own payout status (RLS: owners can read their billing row)
   const { data: billing } = await supabase
     .from("account_billing")
-    .select("connect_charges_enabled")
+    .select("*")
     .eq("user_id", sale.owner_id)
     .maybeSingle();
 
@@ -59,6 +66,8 @@ export default async function SaleAdminPage({ params }: { params: { saleId: stri
       profilePaymentOptions={profile?.payment_options}
       payoutsReady={!!billing?.connect_charges_enabled}
       initialOrders={orders || []}
+      justCreated={searchParams.welcome === "1"}
+      access={accessFor(billing)}
     />
   );
 }

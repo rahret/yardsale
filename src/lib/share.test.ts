@@ -107,6 +107,14 @@ describe("previews", () => {
 });
 
 describe("salePost", () => {
+  it("only mentions holding items when some item can be held or bought online", () => {
+    const firstCome = items.map((i) => ({ ...i, sell_mode: "in_person" as const }));
+    expect(salePost("group", sale, days, firstCome, "L")).toContain("Browse photos and prices before you come: L");
+    expect(salePost("craigslist", sale, days, firstCome, "L")).not.toContain("hold");
+    const oneHold = [{ ...firstCome[0], quantity_total: 1, sell_mode: "hold" as const }, ...firstCome.slice(1)];
+    expect(salePost("group", sale, days, oneHold, "L")).toContain("reserve items before you come");
+  });
+
   it("never includes the house number by default", () => {
     for (const kind of ["group", "craigslist", "text"] as const) {
       const text = salePost(kind, sale, days, items, "https://x.com/s/abc?src=group");

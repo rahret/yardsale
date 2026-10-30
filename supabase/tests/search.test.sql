@@ -4,6 +4,8 @@
 insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000f1', 'search-seller@example.com');
 -- Ankeny (~0 mi from the search point), Des Moines (~12 mi), Iowa City (~110 mi),
 -- one with no coordinates yet, one unlisted, one draft
+-- sellers on Pro (holds and directory listings need a full plan)
+insert into public.account_billing (user_id, plan, subscription_status) values ('00000000-0000-0000-0000-0000000000f1', 'pro', 'active');
 insert into public.sales (id, owner_id, slug, name, street, city, state, zip, status, listed, lat, lng) values
   ('f0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000f1', 'ankeny', 'BIG BIG Sale', '5009 NW 4th', 'Ankeny', 'IA', '50023', 'live', true, 41.7318, -93.6001),
   ('f0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-0000000000f1', 'dsm', 'Moving Sale', '812 Oak St', 'Des Moines', 'IA', '50312', 'live', true, 41.5868, -93.6250),

@@ -116,7 +116,7 @@ export interface Profile {
   created_at: string;
 }
 
-export type Plan = "free" | "pro";
+export type Plan = "none" | "pro" | "comp";
 
 export interface AccountBilling {
   user_id: string;
@@ -126,6 +126,10 @@ export interface AccountBilling {
   cancel_at_period_end: boolean;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+  billing_interval: "month" | "year" | null;
+  trial_ends_at: string | null;
+  trial_used: boolean;
+  pass_expires_at: string | null;
   stripe_connect_account_id: string | null;
   connect_charges_enabled: boolean;
   connect_payouts_enabled: boolean;

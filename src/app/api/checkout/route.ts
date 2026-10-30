@@ -6,6 +6,7 @@ import { applicationFeeCents, canBuyOnline, pickupCode, toCents } from "@/lib/fe
 import { publicPhotoUrl } from "@/lib/share";
 import { checkoutSessionParams } from "@/lib/checkout";
 import { isEffectivelyExpired } from "@/lib/utils";
+import { accessFor } from "@/lib/billing";
 import type { Item, Sale } from "@/lib/types";
 
 // "Buy Now": starts a Stripe Checkout for one item. Payment goes to the
@@ -42,9 +43,12 @@ export async function POST(request: NextRequest) {
 
   const { data: billing } = await admin
     .from("account_billing")
-    .select("stripe_connect_account_id, connect_charges_enabled")
+    .select("stripe_connect_account_id, connect_charges_enabled, plan, subscription_status, pass_expires_at")
     .eq("user_id", sale.owner_id)
     .maybeSingle();
+  if (accessFor(billing) !== "full") {
+    return unavailable("This item is first come, first served — come by the sale to buy it.");
+  }
   if (!billing?.stripe_connect_account_id || !billing.connect_charges_enabled) {
     return unavailable("This seller isn't set up to take online payments yet.");
   }

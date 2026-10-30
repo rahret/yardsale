@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { AccountBilling, PaymentOptions, Profile } from "@/lib/types";
 import { passwordError, siteOrigin } from "@/lib/utils";
 import PasswordRules from "@/components/PasswordRules";
+import PlanOptions from "@/components/PlanOptions";
+import { LOCKED_IN_TRIAL, PRICES, accessFor, hasLiveSubscription } from "@/lib/billing";
 
 const PHOTO_BUCKET = "item-photos";
 
@@ -25,6 +27,7 @@ export default function AccountSettings({
   saleCount,
   stripeNotice,
   stripeDetail,
+  billingNotice,
 }: {
   email: string;
   pendingEmail: string;
@@ -37,6 +40,8 @@ export default function AccountSettings({
   stripeNotice?: string;
   /** Stripe's own explanation when setup failed. */
   stripeDetail?: string;
+  /** ?billing=… after Checkout or a billing action. */
+  billingNotice?: string;
 }) {
   return (
     <div className="p-5">
@@ -49,14 +54,14 @@ export default function AccountSettings({
 
       <ProfileSection initialProfile={initialProfile} fallbackDisplayName={fallbackDisplayName} />
       <SecuritySection email={email} pendingEmail={pendingEmail} memberSince={memberSince} />
-      <PlanSection billing={billing} saleCount={saleCount} />
+      <PlanSection billing={billing} saleCount={saleCount} notice={billingNotice} detail={stripeDetail} />
       <GettingPaidSection
         initialProfile={initialProfile}
         billing={billing}
         stripeNotice={stripeNotice}
         stripeDetail={stripeDetail}
       />
-      <DangerZone email={email} />
+      <DangerZone email={email} billing={billing} />
     </div>
   );
 }
@@ -208,46 +213,126 @@ function SecuritySection({
   );
 }
 
-function PlanSection({ billing, saleCount }: { billing: AccountBilling | null; saleCount: number }) {
-  const plan = billing?.plan || "free";
-  const renews = billing?.current_period_end
-    ? new Date(billing.current_period_end).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : null;
+const BILLING_NOTICES: Record<string, { text: string; ok: boolean }> = {
+  subscribed: { text: "You're all set — thanks for subscribing!", ok: true },
+  pass: { text: "Your Sale Pass is active — everything is unlocked.", ok: true },
+  upgraded: { text: "Trial ended early — everything is unlocked now.", ok: true },
+  success: { text: "Thanks! Your plan will update in a moment — refresh if it doesn't.", ok: true },
+  canceled: { text: "Checkout canceled — nothing was charged.", ok: false },
+  already: { text: "You already have a subscription — use Manage billing to change it.", ok: false },
+  unavailable: { text: "Plans aren't switched on for this site yet.", ok: false },
+  error: { text: "Something went wrong talking to Stripe — please try again.", ok: false },
+};
+
+const fmtDate = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : null;
+
+function PlanSection({
+  billing,
+  saleCount,
+  notice,
+  detail,
+}: {
+  billing: AccountBilling | null;
+  saleCount: number;
+  notice?: string;
+  detail?: string;
+}) {
+  const access = accessFor(billing);
+  const status = billing?.subscription_status;
+  const subscribed = hasLiveSubscription(billing);
+  const passEnds = billing?.pass_expires_at && new Date(billing.pass_expires_at) > new Date() ? fmtDate(billing.pass_expires_at) : null;
+  const periodEnd = fmtDate(billing?.current_period_end);
+  const trialEnds = fmtDate(billing?.trial_ends_at);
+  const interval = billing?.billing_interval === "year" ? PRICES.year.label : PRICES.month.label;
+  const shownNotice = notice ? BILLING_NOTICES[notice] : undefined;
+
+  let title: string;
+  let line: string | null = null;
+  if (billing?.plan === "comp") {
+    title = "Pro (complimentary)";
+  } else if (status === "trialing") {
+    title = "Free trial";
+    line = billing?.cancel_at_period_end
+      ? `Canceled — ends ${trialEnds}. You won't be charged.`
+      : `Ends ${trialEnds}, then ${interval}.`;
+  } else if (subscribed) {
+    title = billing?.billing_interval === "year" ? "Pro (yearly)" : "Pro (monthly)";
+    line = billing?.cancel_at_period_end ? `Canceled — ends ${periodEnd}.` : `Renews ${periodEnd} · ${interval}.`;
+  } else if (passEnds) {
+    title = "Sale Pass";
+    line = `Everything unlocked until ${passEnds}.`;
+  } else {
+    title = "No plan";
+    line = billing?.trial_used
+      ? "Your sales stay up, but you can't add sales or items, and Holds, Buy Now and Find yard sales are off."
+      : "Start your free trial to create your first sale.";
+  }
 
   return (
-    <Card title="⭐ Plan & billing">
+    <Card title="⭐ Plan & billing" id="plan">
+      {shownNotice && (
+        <div
+          className={`text-xs font-semibold rounded-lg px-3 py-2 mb-3 ${
+            shownNotice.ok ? "bg-grass/15 text-grass-dark" : "bg-sun/30"
+          }`}
+        >
+          {shownNotice.text}
+          {notice === "error" && detail && <span className="block font-normal mt-0.5">Details: {detail}</span>}
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
         <div>
           <div className="text-xs font-bold opacity-70">Current plan</div>
-          <div className="text-lg font-bold">{plan === "pro" ? "Pro" : "Free"}</div>
-          {billing?.subscription_status && (
-            <div className="text-xs opacity-70">
-              Status: {billing.subscription_status.replace(/_/g, " ")}
-              {renews && (billing.cancel_at_period_end ? ` · ends ${renews}` : ` · renews ${renews}`)}
-            </div>
-          )}
+          <div className="text-lg font-bold">{title}</div>
+          {line && <div className="text-xs opacity-70">{line}</div>}
+          {passEnds && subscribed && <div className="text-xs opacity-70">Sale Pass also active until {passEnds}.</div>}
         </div>
         <div className="text-xs opacity-70">
           {saleCount} {saleCount === 1 ? "sale" : "sales"} created
         </div>
       </div>
 
-      {plan === "pro" ? (
-        <ComingSoonButton label="Manage subscription & invoices" />
-      ) : (
-        <div className="bg-chalk border-2 border-cardboard-dark/50 rounded-lg p-3">
-          <div className="font-bold text-sm mb-1">Upgrade to Pro</div>
-          <p className="text-xs opacity-70 mb-3">
-            Paid plans are coming soon. Subscriptions will be billed securely through Stripe, and you&apos;ll
-            be able to change or cancel anytime from here.
-          </p>
-          <ComingSoonButton label="Upgrade to Pro" primary />
+      {status === "past_due" && (
+        <div className="text-xs font-semibold bg-marker/10 text-marker rounded-lg px-3 py-2 mb-3">
+          Your last payment didn&apos;t go through. Update your card in Manage billing to keep Pro.
         </div>
       )}
+
+      {access === "trial" && (
+        <div className="bg-chalk border-2 border-cardboard-dark/50 rounded-lg p-3 mb-3">
+          <div className="text-xs font-bold opacity-70 mb-1">Locked during the trial</div>
+          <ul className="text-sm space-y-0.5 mb-3">
+            {LOCKED_IN_TRIAL.map((f) => (
+              <li key={f}>🔒 {f}</li>
+            ))}
+          </ul>
+          {!billing?.cancel_at_period_end && (
+            <form action="/api/billing/upgrade" method="post">
+              <button type="submit" className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm shadow-tag">
+                Unlock everything now
+              </button>
+              <span className="block text-[11px] opacity-60 mt-1">
+                Ends your trial today and charges {interval} to your card on file.
+              </span>
+            </form>
+          )}
+        </div>
+      )}
+
+      {billing?.stripe_customer_id && (subscribed || billing.trial_used) && (
+        <form action="/api/billing/portal" method="post" className="mb-3">
+          <button type="submit" className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm">
+            Manage billing
+          </button>
+          <span className="block text-[11px] opacity-60 mt-1">
+            Update your card, see receipts, or cancel.
+          </span>
+        </form>
+      )}
+
+      {!subscribed && billing?.plan !== "comp" && <PlanOptions billing={billing} returnTo="/dashboard/account#plan" />}
     </Card>
   );
 }
@@ -370,8 +455,10 @@ function GettingPaidSection({
   );
 }
 
-function DangerZone({ email }: { email: string }) {
+function DangerZone({ email, billing }: { email: string; billing: AccountBilling | null }) {
   const [open, setOpen] = useState(false);
+  // Stripe would keep billing a deleted account (the database refuses too)
+  const mustCancelFirst = hasLiveSubscription(billing) && !billing?.cancel_at_period_end;
   const [typed, setTyped] = useState("");
   const [status, setStatus] = useState<Status>(null);
 
@@ -417,7 +504,11 @@ function DangerZone({ email }: { email: string }) {
       <p className="text-xs opacity-70 mb-3">
         Permanently deletes your account, all of your sales, items, and photos. This can&apos;t be undone.
       </p>
-      {!open ? (
+      {mustCancelFirst ? (
+        <p className="text-xs font-semibold bg-sun/30 rounded-lg px-3 py-2">
+          Cancel your subscription first (Plan &amp; billing → Manage billing), then you can delete your account.
+        </p>
+      ) : !open ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -479,24 +570,9 @@ function SaveRow({ label, status, onClick }: { label: string; status: Status; on
   );
 }
 
-function ComingSoonButton({ label, primary }: { label: string; primary?: boolean }) {
+function Card({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      disabled
-      title="Coming soon"
-      className={`font-bold px-4 py-2 rounded-lg text-sm opacity-50 cursor-not-allowed ${
-        primary ? "bg-grass text-white" : "border-2 border-cardboard-dark bg-white"
-      }`}
-    >
-      {label} <span className="text-[10px] uppercase tracking-wide">· soon</span>
-    </button>
-  );
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white border-2 border-cardboard-dark rounded-xl p-4 mb-4">
+    <div id={id} className="bg-white border-2 border-cardboard-dark rounded-xl p-4 mb-4 scroll-mt-4">
       <h3 className="text-sm font-bold mb-3">{title}</h3>
       {children}
     </div>
