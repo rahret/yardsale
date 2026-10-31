@@ -11,7 +11,8 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
 
   const [{ data: sales }, { data: billing }] = await Promise.all([
-    supabase.from("sales").select("*").order("created_at", { ascending: false }),
+    // only this seller's sales — RLS also lets anyone read every published sale
+    supabase.from("sales").select("*").eq("owner_id", user?.id ?? "").order("created_at", { ascending: false }),
     supabase.from("account_billing").select("*").eq("user_id", user?.id ?? "").maybeSingle(),
   ]);
 
