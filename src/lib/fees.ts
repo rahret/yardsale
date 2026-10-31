@@ -7,6 +7,7 @@ export interface FeeSettings {
   stripeFixedCents: number;
   /** The app's own cut, on top of Stripe's fee. */
   platformPercent: number;
+  platformFixedCents: number;
 }
 
 const num = (v: string | undefined, fallback: number) => {
@@ -14,13 +15,16 @@ const num = (v: string | undefined, fallback: number) => {
   return v !== undefined && v !== "" && Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
-/** Defaults: Stripe's standard US card rate, no platform cut. Override with
- * NEXT_PUBLIC_STRIPE_FEE_PERCENT / _FIXED_CENTS and NEXT_PUBLIC_PLATFORM_FEE_PERCENT. */
+/** Defaults: Stripe's standard US card rate plus a 1.5% + 15¢ platform cut
+ * (which covers Stripe Connect's per-seller and payout fees). Override with
+ * NEXT_PUBLIC_STRIPE_FEE_PERCENT / _FIXED_CENTS and
+ * NEXT_PUBLIC_PLATFORM_FEE_PERCENT / _FIXED_CENTS. */
 export function feeSettings(): FeeSettings {
   return {
     stripePercent: num(process.env.NEXT_PUBLIC_STRIPE_FEE_PERCENT, 2.9),
     stripeFixedCents: num(process.env.NEXT_PUBLIC_STRIPE_FEE_FIXED_CENTS, 30),
-    platformPercent: num(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT, 0),
+    platformPercent: num(process.env.NEXT_PUBLIC_PLATFORM_FEE_PERCENT, 1.5),
+    platformFixedCents: num(process.env.NEXT_PUBLIC_PLATFORM_FEE_FIXED_CENTS, 15),
   };
 }
 
@@ -29,7 +33,7 @@ export function feeSettings(): FeeSettings {
  * receives the rest. */
 export function applicationFeeCents(amountCents: number, s: FeeSettings = feeSettings()): number {
   const stripe = Math.ceil((amountCents * s.stripePercent) / 100) + s.stripeFixedCents;
-  const platform = Math.round((amountCents * s.platformPercent) / 100);
+  const platform = Math.round((amountCents * s.platformPercent) / 100) + s.platformFixedCents;
   return Math.min(amountCents, stripe + platform);
 }
 
@@ -37,8 +41,10 @@ export function sellerNetCents(amountCents: number, s: FeeSettings = feeSettings
   return amountCents - applicationFeeCents(amountCents, s);
 }
 
-/** Stripe won't charge less than 50¢ (USD), so cheaper items can only be held. */
-export const MIN_CHARGE_CENTS = 50;
+/** Buy Now needs a price of at least $3: below that the fixed card fee eats
+ * most of the sale (Stripe's own minimum is 50¢). Cheaper items can be held
+ * or sold first come, first served. */
+export const MIN_CHARGE_CENTS = 300;
 
 /** Whether an item can be bought online (when the sale has Buy Now on):
  * single items Stripe is able to charge for. */

@@ -152,11 +152,12 @@ _Last updated: 2026-10-30_
   - _Done (pending merge):_ **Buy Now** through Stripe — card, Apple Pay, Google Pay and
     Cash App Pay. Sellers connect payouts (Stripe Express) on the Account page, then choose
     **how buyers get each item**: First come, first served (default), Hold, or Buy Now —
-    exactly one (bulk items are always first come; Buy Now needs 50¢+). Buyers pay, get a
+    exactly one (bulk items are always first come; Buy Now needs $3+). Buyers pay, get a
     pickup code, and the item is marked sold. Sellers mark orders picked up or refund them.
   - _Decided against (for now):_ Venmo through PayPal (separate integration), and
     "pay the seller directly" links (can't confirm payment; exposes handles).
-  - _Still to decide:_ platform fee (default 0% on top of Stripe's fee), no-show policy
+  - _Decided:_ platform fee 1.5% + 15¢ on top of Stripe's fee; Buy Now minimum $3.
+  - _Still to decide:_ no-show policy
     (default: seller keeps payment and can refund by hand), legal/tax review before launch.
 - ⬜ **Email notifications.** Purchase and hold alerts to sellers; Stripe's own receipt
   covers buyers for now. Needs an email service (e.g. Resend).
