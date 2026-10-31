@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applicationFeeCents, canBuyOnline, feeSettings, pickupCode, sellerNetCents, toCents } from "./fees";
 
-const stripeOnly = { stripePercent: 2.9, stripeFixedCents: 30, platformPercent: 0 };
+const stripeOnly = { stripePercent: 2.9, stripeFixedCents: 30, platformPercent: 0, platformFixedCents: 0 };
 
 describe("fees", () => {
   it("covers Stripe's fee so the platform never loses money", () => {
@@ -18,11 +18,13 @@ describe("fees", () => {
     expect(toCents(19.99)).toBe(1999);
     expect(toCents("0.1")).toBe(10);
   });
-  it("takes 1.5% for the platform by default", () => {
-    expect(feeSettings().platformPercent).toBe(1.5);
-    // $25: Stripe ceil(72.5) + 30 = 103, platform 37.5 → 38
-    expect(applicationFeeCents(2500, feeSettings())).toBe(103 + 38);
-    expect(sellerNetCents(2500, feeSettings())).toBe(2359);
+  it("takes 1.5% + 15¢ for the platform by default", () => {
+    expect(feeSettings()).toMatchObject({ platformPercent: 1.5, platformFixedCents: 15 });
+    // $25: Stripe ceil(72.5) + 30 = 103, platform round(37.5) + 15 = 53
+    expect(applicationFeeCents(2500, feeSettings())).toBe(103 + 53);
+    expect(sellerNetCents(2500, feeSettings())).toBe(2344);
+    // $3, the Buy Now minimum: Stripe ceil(8.7) + 30 = 39, platform round(4.5) + 15 = 20
+    expect(sellerNetCents(300, feeSettings())).toBe(241);
   });
   it("offers Buy Now on single items priced $3 or more", () => {
     expect(canBuyOnline({ price: 3, quantity_total: 1 })).toBe(true);

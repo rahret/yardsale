@@ -133,7 +133,7 @@ in `src/lib/fees.ts`; Stripe's own minimum is 50¢, but below $3 the fixed card 
 the sale). The database refuses holds on anything but Hold items, and checkout refuses
 anything but Buy Now items. Money goes to the seller through
 **Stripe Connect** (Express accounts, destination charges). The app keeps an application fee
-equal to Stripe's processing fee (which the platform pays on these charges) plus a 1.5%
+equal to Stripe's processing fee (which the platform pays on these charges) plus a 1.5% + 15¢
 platform cut, which covers Stripe Connect's per-seller and payout fees.
 
 How it fits together:
@@ -166,7 +166,8 @@ Setup:
    - `STRIPE_SECRET_KEY`
    - `STRIPE_WEBHOOK_SECRET` (first endpoint) and `STRIPE_CONNECT_WEBHOOK_SECRET` (second)
    - `SUPABASE_SERVICE_ROLE_KEY` (Supabase → Settings → API; never expose it to the browser)
-   - optional `NEXT_PUBLIC_PLATFORM_FEE_PERCENT` (default 1.5), and
+   - optional `NEXT_PUBLIC_PLATFORM_FEE_PERCENT` (default 1.5) and
+     `NEXT_PUBLIC_PLATFORM_FEE_FIXED_CENTS` (default 15), and
      `NEXT_PUBLIC_STRIPE_FEE_PERCENT` / `NEXT_PUBLIC_STRIPE_FEE_FIXED_CENTS` if your Stripe
      rate isn't 2.9% + 30¢.
 6. Re-run `supabase/schema.sql`.
