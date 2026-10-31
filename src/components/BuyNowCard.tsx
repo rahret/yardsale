@@ -83,10 +83,10 @@ export default function BuyNowCard({
             up with a code; Hold items are reserved and paid in person.
           </div>
           <div className="text-[11px] opacity-60 mt-2">
-            Card fees come out of each Buy Now sale: on a {money(25)} item you&apos;d receive about{" "}
-            {money(sellerNetCents(exampleCents) / 100)}, and on a {money(2)} item about{" "}
-            {money(sellerNetCents(toCents(2)) / 100)}. Bulk items and anything under {money(MIN_CHARGE_CENTS / 100)}{" "}
-            (Stripe&apos;s minimum) can only be held. If a buyer doesn&apos;t show up, you can refund them below.
+            Card and service fees come out of each Buy Now sale: on a {money(25)} item you&apos;d receive about{" "}
+            {money(sellerNetCents(exampleCents) / 100)}, and on a {money(5)} item about{" "}
+            {money(sellerNetCents(toCents(5)) / 100)}. Bulk items and anything under {money(MIN_CHARGE_CENTS / 100)}{" "}
+            can&apos;t use Buy Now. If a buyer doesn&apos;t show up, you can refund them below.
           </div>
         </>
       )}

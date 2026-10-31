@@ -128,12 +128,13 @@ Buyers can pay for an item online (card, Apple Pay, Google Pay, Cash App Pay) an
 with a 4-digit code. Each item has exactly one way to buy it, picked by the seller when adding
 or editing it (`items.sell_mode`): **First come, first served** (no holds or online payment;
 the default), **Hold** (reserve, pay in person) or **Buy Now** (pay online). Bulk items are
-always first come, first served, and Buy Now needs a price of at least 50¢ (Stripe's
-minimum). The database refuses holds on anything but Hold items, and checkout refuses
+always first come, first served, and Buy Now needs a price of at least $3 (`MIN_CHARGE_CENTS`
+in `src/lib/fees.ts`; Stripe's own minimum is 50¢, but below $3 the fixed card fee eats most of
+the sale). The database refuses holds on anything but Hold items, and checkout refuses
 anything but Buy Now items. Money goes to the seller through
 **Stripe Connect** (Express accounts, destination charges). The app keeps an application fee
-equal to Stripe's processing fee (which the platform pays on these charges) plus an optional
-platform cut.
+equal to Stripe's processing fee (which the platform pays on these charges) plus a 1.5%
+platform cut, which covers Stripe Connect's per-seller and payout fees.
 
 How it fits together:
 
@@ -165,7 +166,7 @@ Setup:
    - `STRIPE_SECRET_KEY`
    - `STRIPE_WEBHOOK_SECRET` (first endpoint) and `STRIPE_CONNECT_WEBHOOK_SECRET` (second)
    - `SUPABASE_SERVICE_ROLE_KEY` (Supabase → Settings → API; never expose it to the browser)
-   - optional `NEXT_PUBLIC_PLATFORM_FEE_PERCENT` (default 0), and
+   - optional `NEXT_PUBLIC_PLATFORM_FEE_PERCENT` (default 1.5), and
      `NEXT_PUBLIC_STRIPE_FEE_PERCENT` / `NEXT_PUBLIC_STRIPE_FEE_FIXED_CENTS` if your Stripe
      rate isn't 2.9% + 30¢.
 6. Re-run `supabase/schema.sql`.

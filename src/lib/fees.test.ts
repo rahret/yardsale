@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applicationFeeCents, canBuyOnline, pickupCode, sellerNetCents, toCents } from "./fees";
+import { applicationFeeCents, canBuyOnline, feeSettings, pickupCode, sellerNetCents, toCents } from "./fees";
 
 const stripeOnly = { stripePercent: 2.9, stripeFixedCents: 30, platformPercent: 0 };
 
@@ -18,10 +18,17 @@ describe("fees", () => {
     expect(toCents(19.99)).toBe(1999);
     expect(toCents("0.1")).toBe(10);
   });
-  it("offers Buy Now on any single item Stripe can charge (50¢+)", () => {
-    expect(canBuyOnline({ price: 1, quantity_total: 1 })).toBe(true);
-    expect(canBuyOnline({ price: "0.50", quantity_total: 1 })).toBe(true);
-    expect(canBuyOnline({ price: 0.25, quantity_total: 1 })).toBe(false);
+  it("takes 1.5% for the platform by default", () => {
+    expect(feeSettings().platformPercent).toBe(1.5);
+    // $25: Stripe ceil(72.5) + 30 = 103, platform 37.5 → 38
+    expect(applicationFeeCents(2500, feeSettings())).toBe(103 + 38);
+    expect(sellerNetCents(2500, feeSettings())).toBe(2359);
+  });
+  it("offers Buy Now on single items priced $3 or more", () => {
+    expect(canBuyOnline({ price: 3, quantity_total: 1 })).toBe(true);
+    expect(canBuyOnline({ price: "3.00", quantity_total: 1 })).toBe(true);
+    expect(canBuyOnline({ price: 2.99, quantity_total: 1 })).toBe(false);
+    expect(canBuyOnline({ price: 1, quantity_total: 1 })).toBe(false);
     expect(canBuyOnline({ price: 0, quantity_total: 1 })).toBe(false);
     expect(canBuyOnline({ price: 20, quantity_total: 12 })).toBe(false); // bulk: in person only
   });
