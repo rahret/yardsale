@@ -6,6 +6,7 @@ import type { AccountBilling, PaymentOptions, Profile } from "@/lib/types";
 import { passwordError, siteOrigin } from "@/lib/utils";
 import PasswordRules from "@/components/PasswordRules";
 import PlanOptions from "@/components/PlanOptions";
+import UpgradeDialog from "@/components/UpgradeDialog";
 import { LOCKED_IN_TRIAL, PRICES, accessFor, hasLiveSubscription } from "@/lib/billing";
 
 const PHOTO_BUCKET = "item-photos";
@@ -308,16 +309,7 @@ function PlanSection({
               <li key={f}>🔒 {f}</li>
             ))}
           </ul>
-          {!billing?.cancel_at_period_end && (
-            <form action="/api/billing/upgrade" method="post">
-              <button type="submit" className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm shadow-tag">
-                Unlock everything now
-              </button>
-              <span className="block text-[11px] opacity-60 mt-1">
-                Ends your trial today and charges {interval} to your card on file.
-              </span>
-            </form>
-          )}
+          <UpgradeDialog currentInterval={billing?.billing_interval ?? null} />
         </div>
       )}
 

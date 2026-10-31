@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const { data: billing } = await admin
       .from("account_billing")
-      .select("subscription_status, trial_used")
+      .select("subscription_status, stripe_subscription_id, trial_used")
       .eq("user_id", user.id)
       .maybeSingle();
     if (choice !== "pass" && hasLiveSubscription(billing)) return billingRedirect("already", returnTo);
@@ -25,7 +25,13 @@ export async function POST(request: NextRequest) {
     const customerId = await ensureCustomer(stripe, admin, user);
     const session = await stripe.checkout.sessions.create(
       choice === "pass"
-        ? passCheckoutParams({ customerId, userId: user.id, origin, returnTo })
+        ? passCheckoutParams({
+            customerId,
+            userId: user.id,
+            origin,
+            returnTo,
+            endTrialSubscription: billing?.subscription_status === "trialing" ? billing.stripe_subscription_id : null,
+          })
         : subscriptionCheckoutParams({
             interval: choice,
             customerId,

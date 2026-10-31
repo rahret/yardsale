@@ -186,8 +186,14 @@ There's no free tier. Sellers choose one of:
 
 During the trial, the locked features (more sales or items, Holds, Buy Now, Find yard sales)
 are still shown, with a 🔒 Pro badge and a link to the plans. "Unlock everything now" on the
-Account page ends the trial early and charges the first period; if the card is declined,
-nothing changes. One trial per account.
+Account page opens a confirmation pop-up where the seller picks monthly, yearly or a Sale Pass
+and sees what will happen before anything changes:
+- **Monthly / yearly:** the trial ends now and the card on file is charged for the first
+  period (switching period if needed). If the card is declined, nothing changes.
+- **Sale Pass:** the seller pays on Stripe Checkout; once paid, the trial subscription is
+  canceled so Pro never bills them. If they don't finish paying, the trial carries on.
+
+One trial per account.
 
 Without a plan (trial canceled, subscription ended, pass expired), the seller's sales stay up,
 but they can't add sales or items, their sales leave Find yard sales, and buyers see every

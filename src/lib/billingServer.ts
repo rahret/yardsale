@@ -1,7 +1,7 @@
 import "server-only";
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { PASS_DAYS, isLiveStatus, subscriptionBillingFields } from "./billing";
+import { PASS_DAYS, PRICES, isLiveStatus, subscriptionBillingFields } from "./billing";
 
 /** The seller's Stripe customer, created on first use. */
 export async function ensureCustomer(
@@ -25,6 +25,17 @@ export async function ensureCustomer(
     .upsert({ user_id: user.id, stripe_customer_id: customer.id }, { onConflict: "user_id" });
   if (error) throw new Error(`Couldn't save the Stripe customer: ${error.message}`);
   return customer.id;
+}
+
+/** A Stripe product for each Pro billing period, created on first use (used
+ * when a trial seller switches period while upgrading). */
+export async function ensureProProduct(stripe: Stripe, interval: "month" | "year"): Promise<string> {
+  const id = `yardsaleqr_pro_${interval}`;
+  try {
+    return (await stripe.products.retrieve(id)).id;
+  } catch {
+    return (await stripe.products.create({ id, name: PRICES[interval].name })).id;
+  }
 }
 
 /** Copies a subscription's state into account_billing. Events can arrive out
@@ -78,6 +89,18 @@ export async function applyBillingCheckout(
       p_days: PASS_DAYS,
     });
     if (error) throw new Error(`grant_sale_pass failed: ${error.message}`);
+
+    // bought from the trial: end the trial so Pro never bills them
+    const trialSub = session.metadata?.end_trial_subscription;
+    if (trialSub) {
+      const sub = await stripe.subscriptions.retrieve(trialSub);
+      const customer = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+      const sessionCustomer = typeof session.customer === "string" ? session.customer : session.customer?.id;
+      if (sub.status === "trialing" && customer === sessionCustomer) {
+        await syncSubscription(admin, await stripe.subscriptions.cancel(trialSub));
+        return "sale pass granted, trial ended";
+      }
+    }
     return "sale pass granted";
   }
 

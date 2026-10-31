@@ -84,6 +84,11 @@ describe("Checkout settings", () => {
     expect(p.metadata).toEqual({ kind: "sale_pass", user_id: "user-1" });
   });
 
+  it("remembers which trial to end when the pass is bought from the trial", () => {
+    const p = passCheckoutParams({ ...base, returnTo: "/dashboard/account#plan", endTrialSubscription: "sub_trial" });
+    expect(p.metadata).toEqual({ kind: "sale_pass", user_id: "user-1", end_trial_subscription: "sub_trial" });
+  });
+
   it("adds notices to return paths", () => {
     expect(billingNoticeUrl("https://x.test", "/dashboard/account#plan", "pass")).toBe(
       "https://x.test/dashboard/account?billing=pass#plan"

@@ -72,5 +72,18 @@ describe.skipIf(!port)("Stripe API payloads (stripe-mock)", () => {
       proration_behavior: "none",
     });
     expect(upgraded.object).toBe("subscription");
+    // switching monthly → yearly while ending the trial
+    const product = await stripe.products.create({ id: "yardsaleqr_pro_year", name: "Yard Sale QR Pro (yearly)" });
+    const switched = await stripe.subscriptions.update("sub_123", {
+      trial_end: "now",
+      items: [
+        { id: "si_123", price_data: { currency: "usd", product: product.id, unit_amount: 5900, recurring: { interval: "year" } } },
+      ],
+      cancel_at_period_end: false,
+      payment_behavior: "error_if_incomplete",
+      proration_behavior: "none",
+    });
+    expect(switched.object).toBe("subscription");
+    expect((await stripe.subscriptions.cancel("sub_123")).object).toBe("subscription");
   });
 });

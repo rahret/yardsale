@@ -97,12 +97,15 @@ export function subscriptionCheckoutParams(o: {
   };
 }
 
-/** Stripe Checkout settings for a one-time 30-day Sale Pass. */
+/** Stripe Checkout settings for a one-time 30-day Sale Pass. When bought
+ * from the trial, endTrialSubscription names the trial subscription to
+ * cancel once the pass is paid (so the seller isn't billed for Pro too). */
 export function passCheckoutParams(o: {
   customerId: string;
   userId: string;
   origin: string;
   returnTo: string;
+  endTrialSubscription?: string | null;
 }): Stripe.Checkout.SessionCreateParams {
   return {
     mode: "payment",
@@ -122,7 +125,11 @@ export function passCheckoutParams(o: {
     ],
     payment_intent_data: { metadata: { kind: "sale_pass", user_id: o.userId } },
     invoice_creation: { enabled: true },
-    metadata: { kind: "sale_pass", user_id: o.userId },
+    metadata: {
+      kind: "sale_pass",
+      user_id: o.userId,
+      ...(o.endTrialSubscription ? { end_trial_subscription: o.endTrialSubscription } : {}),
+    },
     allow_promotion_codes: true,
     success_url: billingReturnUrl(o.origin, o.returnTo),
     cancel_url: billingNoticeUrl(o.origin, o.returnTo, "canceled"),
