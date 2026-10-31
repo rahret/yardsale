@@ -13,6 +13,25 @@ export const PRICES: Record<BillingChoice, { cents: number; label: string; name:
   pass: { cents: 1499, label: "$14.99 once", name: "Yard Sale QR Sale Pass (30 days)" },
 };
 
+/** "$7.99", "$59": a plan's price without the period. */
+export function priceText(choice: BillingChoice): string {
+  const cents = PRICES[choice].cents;
+  return `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`;
+}
+
+/** One fixed Stripe product per plan, so every subscription and pass is filed
+ * under the same product in Stripe's reports. Prices stay here in PRICES and
+ * are sent with each checkout; the products are created on first use. */
+export const PRODUCT_IDS: Record<BillingChoice, string> = {
+  month: "yardsaleqr_pro_month",
+  year: "yardsaleqr_pro_year",
+  pass: "yardsaleqr_sale_pass",
+};
+
+export const PRODUCT_DESCRIPTIONS: Partial<Record<BillingChoice, string>> = {
+  pass: "Everything in Pro for 30 days. No subscription — it just ends.",
+};
+
 export const TRIAL_DAYS = 7;
 export const PASS_DAYS = 30;
 
@@ -64,6 +83,10 @@ export function subscriptionCheckoutParams(o: {
   origin: string;
   withTrial: boolean;
   returnTo: string;
+  /** Unix seconds: start billing then instead of now (when a Sale Pass is still running). */
+  startAt?: number | null;
+  /** The plan's Stripe product (PRODUCT_IDS; see ensureProduct). */
+  productId: string;
 }): Stripe.Checkout.SessionCreateParams {
   const price = PRICES[o.interval];
   return {
@@ -77,13 +100,19 @@ export function subscriptionCheckoutParams(o: {
           currency: "usd",
           unit_amount: price.cents,
           recurring: { interval: o.interval },
-          product_data: { name: price.name },
+          product: o.productId,
         },
       },
     ],
     subscription_data: {
       metadata: { user_id: o.userId },
-      ...(o.withTrial
+      ...(o.startAt
+        ? {
+            // nothing is charged until the pass runs out
+            trial_end: o.startAt,
+            trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
+          }
+        : o.withTrial
         ? {
             trial_period_days: TRIAL_DAYS,
             trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
@@ -97,6 +126,18 @@ export function subscriptionCheckoutParams(o: {
   };
 }
 
+/** Stripe only lets Checkout delay the first charge if it's at least 48 hours
+ * away; a pass ending sooner than that just overlaps the new subscription. */
+const MIN_DELAYED_START_MS = 48 * 60 * 60 * 1000;
+
+/** When a seller with a Sale Pass subscribes, when billing should start
+ * (unix seconds), or null to start now. */
+export function subscriptionStartAfterPass(passExpiresAt: string | null | undefined, now = Date.now()): number | null {
+  if (!passExpiresAt) return null;
+  const ends = new Date(passExpiresAt).getTime();
+  return ends - now >= MIN_DELAYED_START_MS ? Math.floor(ends / 1000) : null;
+}
+
 /** Stripe Checkout settings for a one-time 30-day Sale Pass. When bought
  * from the trial, endTrialSubscription names the trial subscription to
  * cancel once the pass is paid (so the seller isn't billed for Pro too). */
@@ -106,6 +147,8 @@ export function passCheckoutParams(o: {
   origin: string;
   returnTo: string;
   endTrialSubscription?: string | null;
+  /** The Sale Pass's Stripe product (PRODUCT_IDS; see ensureProduct). */
+  productId: string;
 }): Stripe.Checkout.SessionCreateParams {
   return {
     mode: "payment",
@@ -116,10 +159,7 @@ export function passCheckoutParams(o: {
         price_data: {
           currency: "usd",
           unit_amount: PRICES.pass.cents,
-          product_data: {
-            name: PRICES.pass.name,
-            description: `Everything in Pro for ${PASS_DAYS} days. No subscription — it just ends.`,
-          },
+          product: o.productId,
         },
       },
     ],

@@ -55,7 +55,7 @@ describe.skipIf(!port)("Stripe API payloads (stripe-mock)", () => {
   });
 
   it("seller plans: trial subscription, Sale Pass, portal and ending a trial early are accepted", async () => {
-    const base = { customerId: "cus_123", userId: "u1", origin: "https://x.com", returnTo: "/dashboard/welcome" };
+    const base = { customerId: "cus_123", userId: "u1", origin: "https://x.com", returnTo: "/dashboard/welcome", productId: "prod_123" };
     const sub = await stripe.checkout.sessions.create(subscriptionCheckoutParams({ ...base, interval: "month", withTrial: true }));
     expect(sub.object).toBe("checkout.session");
     const year = await stripe.checkout.sessions.create(subscriptionCheckoutParams({ ...base, interval: "year", withTrial: false }));
@@ -85,5 +85,20 @@ describe.skipIf(!port)("Stripe API payloads (stripe-mock)", () => {
     });
     expect(switched.object).toBe("subscription");
     expect((await stripe.subscriptions.cancel("sub_123")).object).toBe("subscription");
+    // "Change plan": switching period with a prorated invoice now
+    const changed = await stripe.subscriptions.update("sub_123", {
+      items: [
+        { id: "si_123", price_data: { currency: "usd", product: "yardsaleqr_pro_month", unit_amount: 799, recurring: { interval: "month" } } },
+      ],
+      cancel_at_period_end: false,
+      proration_behavior: "always_invoice",
+      payment_behavior: "error_if_incomplete",
+    });
+    expect(changed.object).toBe("subscription");
+    // subscribing while a Sale Pass runs: first charge when it ends
+    const later = await stripe.checkout.sessions.create(
+      subscriptionCheckoutParams({ ...base, interval: "month", withTrial: false, startAt: Math.floor(Date.now() / 1000) + 10 * 86400 })
+    );
+    expect(later.object).toBe("checkout.session");
   });
 });
