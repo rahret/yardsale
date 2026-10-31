@@ -129,14 +129,14 @@ describe("handleStripeEvent — seller billing", () => {
   it("grants a Sale Pass once paid, without touching orders", async () => {
     const { admin, rpc } = fakeBillingAdmin();
     const { stripe } = fakeStripe();
-    const session = { id: "cs_pass", payment_status: "paid", amount_total: 999, metadata: { kind: "sale_pass", user_id: "user-1" } };
+    const session = { id: "cs_pass", payment_status: "paid", amount_total: 1499, metadata: { kind: "sale_pass", user_id: "user-1" } };
     expect(await handleStripeEvent(event("checkout.session.completed", session), stripe, admin as never)).toBe(
       "sale pass granted"
     );
     expect(rpc).toHaveBeenCalledWith("grant_sale_pass", {
       p_user: "user-1",
       p_session: "cs_pass",
-      p_amount_cents: 999,
+      p_amount_cents: 1499,
       p_days: 30,
     });
     expect(rpc).not.toHaveBeenCalledWith("complete_order", expect.anything());

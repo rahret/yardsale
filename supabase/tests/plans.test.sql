@@ -153,14 +153,14 @@ declare
   v_again timestamptz;
   v_second timestamptz;
 begin
-  v_first := public.grant_sale_pass('00000000-0000-0000-0000-0000000000b1', 'cs_pass_1', 999);
+  v_first := public.grant_sale_pass('00000000-0000-0000-0000-0000000000b1', 'cs_pass_1', 1499);
   assert v_first between now() + interval '29 days 23 hours' and now() + interval '30 days 1 hour', '30 days from now';
   assert public.seller_access('00000000-0000-0000-0000-0000000000b1') = 'full', 'pass unlocks everything';
 
-  v_again := public.grant_sale_pass('00000000-0000-0000-0000-0000000000b1', 'cs_pass_1', 999);
+  v_again := public.grant_sale_pass('00000000-0000-0000-0000-0000000000b1', 'cs_pass_1', 1499);
   assert v_again = v_first, 'repeated webhook doesn''t extend';
 
-  v_second := public.grant_sale_pass('00000000-0000-0000-0000-0000000000b1', 'cs_pass_2', 999);
+  v_second := public.grant_sale_pass('00000000-0000-0000-0000-0000000000b1', 'cs_pass_2', 1499);
   assert v_second = v_first + interval '30 days', 'second pass stacks on the first';
 end;
 $$;
