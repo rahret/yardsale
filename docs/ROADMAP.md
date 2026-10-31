@@ -142,8 +142,9 @@ _Last updated: 2026-10-30_
     customer portal (card, receipts, cancel), "Unlock everything now" (ends the trial early),
     webhook sync, limits enforced in the database. Lapsed sellers keep their sales up but
     can't add to them; holds/Buy Now/directory turn off. Complimentary accounts via SQL.
-  - _Still to do:_ maybe **Business ~$24.99/mo** for estate-sale companies; switching
-    monthly ↔ yearly in the portal (needs products in Stripe's catalog); Pro-only extras
+  - _Done (pending merge):_ **Change plan** (monthly ↔ yearly, prorated), and subscribing
+    from a Sale Pass starts billing when the pass ends.
+  - _Still to do:_ maybe **Business ~$24.99/mo** for estate-sale companies; Pro-only extras
     (visit stats, extra sign layouts, AI item entry, promoted listings).
 - 🟡 **Help sellers take payment.** Sellers can save how buyers pay them (cash, Venmo,
   Cash App, PayPal, Zelle) on the Account page.

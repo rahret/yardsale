@@ -7,6 +7,7 @@ import {
   passCheckoutParams,
   subscriptionBillingFields,
   subscriptionCheckoutParams,
+  subscriptionStartAfterPass,
 } from "./billing";
 
 const NOW = Date.parse("2026-10-30T12:00:00Z");
@@ -75,6 +76,21 @@ describe("Checkout settings", () => {
     expect(p.subscription_data?.trial_period_days).toBeUndefined();
     expect(p.line_items?.[0].price_data).toMatchObject({ unit_amount: 5900, recurring: { interval: "year" } });
     expect(p.cancel_url).toBe("https://yardsaleqr.example.com/dashboard/account?billing=canceled#plan");
+  });
+
+  it("starts billing when a running Sale Pass ends, with no free trial on top", () => {
+    const passEnds = "2026-11-20T00:00:00Z";
+    const startAt = subscriptionStartAfterPass(passEnds, NOW);
+    expect(startAt).toBe(Date.parse(passEnds) / 1000);
+    const p = subscriptionCheckoutParams({ ...base, interval: "year", withTrial: false, returnTo: "/x", startAt });
+    expect(p.subscription_data?.trial_end).toBe(startAt);
+    expect(p.subscription_data?.trial_period_days).toBeUndefined();
+  });
+
+  it("starts billing now when the pass ends within 48 hours (Stripe's minimum delay)", () => {
+    expect(subscriptionStartAfterPass("2026-11-01T06:00:00Z", NOW)).toBeNull();
+    expect(subscriptionStartAfterPass("2026-10-01T00:00:00Z", NOW)).toBeNull();
+    expect(subscriptionStartAfterPass(null, NOW)).toBeNull();
   });
 
   it("sells the Sale Pass as a one-time payment", () => {

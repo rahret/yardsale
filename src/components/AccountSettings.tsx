@@ -7,6 +7,7 @@ import { passwordError, siteOrigin } from "@/lib/utils";
 import PasswordRules from "@/components/PasswordRules";
 import PlanOptions from "@/components/PlanOptions";
 import UpgradeDialog from "@/components/UpgradeDialog";
+import ChangePlanDialog from "@/components/ChangePlanDialog";
 import { LOCKED_IN_TRIAL, PRICES, accessFor, hasLiveSubscription } from "@/lib/billing";
 
 const PHOTO_BUCKET = "item-photos";
@@ -218,6 +219,8 @@ const BILLING_NOTICES: Record<string, { text: string; ok: boolean }> = {
   subscribed: { text: "You're all set — thanks for subscribing!", ok: true },
   pass: { text: "Your Sale Pass is active — everything is unlocked.", ok: true },
   upgraded: { text: "Trial ended early — everything is unlocked now.", ok: true },
+  switched: { text: "Your plan has been changed.", ok: true },
+  "same-plan": { text: "You're already on that plan.", ok: false },
   success: { text: "Thanks! Your plan will update in a moment — refresh if it doesn't.", ok: true },
   canceled: { text: "Checkout canceled — nothing was charged.", ok: false },
   already: { text: "You already have a subscription — use Manage billing to change it.", ok: false },
@@ -252,6 +255,12 @@ function PlanSection({
   let line: string | null = null;
   if (billing?.plan === "comp") {
     title = "Pro (complimentary)";
+  } else if (status === "trialing" && passEnds) {
+    // subscribed while a Sale Pass was running: billing starts when it ends
+    title = "Sale Pass";
+    line = billing?.cancel_at_period_end
+      ? `Everything unlocked until ${passEnds}. Your Pro plan is canceled and won't start.`
+      : `Everything unlocked until ${passEnds}. Then Pro (${billing?.billing_interval === "year" ? "yearly" : "monthly"}) starts at ${interval}.`;
   } else if (status === "trialing") {
     title = "Free trial";
     line = billing?.cancel_at_period_end
@@ -288,7 +297,7 @@ function PlanSection({
           <div className="text-xs font-bold opacity-70">Current plan</div>
           <div className="text-lg font-bold">{title}</div>
           {line && <div className="text-xs opacity-70">{line}</div>}
-          {passEnds && subscribed && <div className="text-xs opacity-70">Sale Pass also active until {passEnds}.</div>}
+          {passEnds && subscribed && status !== "trialing" && <div className="text-xs opacity-70">Sale Pass also active until {passEnds}.</div>}
         </div>
         <div className="text-xs opacity-70">
           {saleCount} {saleCount === 1 ? "sale" : "sales"} created
@@ -313,6 +322,16 @@ function PlanSection({
         </div>
       )}
 
+      {subscribed && access === "full" && billing?.plan !== "comp" && !billing?.cancel_at_period_end && (
+        <div className="mb-3">
+          <ChangePlanDialog
+            currentInterval={billing?.billing_interval === "year" ? "year" : "month"}
+            startsOn={status === "trialing" ? trialEnds : null}
+          />
+          <span className="block text-[11px] opacity-60 mt-1">Switch between monthly and yearly.</span>
+        </div>
+      )}
+
       {billing?.stripe_customer_id && (subscribed || billing.trial_used) && (
         <form action="/api/billing/portal" method="post" className="mb-3">
           <button type="submit" className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm">
@@ -324,7 +343,9 @@ function PlanSection({
         </form>
       )}
 
-      {!subscribed && billing?.plan !== "comp" && <PlanOptions billing={billing} returnTo="/dashboard/account#plan" />}
+      {!subscribed && billing?.plan !== "comp" && (
+        <PlanOptions billing={billing} returnTo="/dashboard/account#plan" />
+      )}
     </Card>
   );
 }

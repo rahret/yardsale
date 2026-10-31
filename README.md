@@ -197,6 +197,16 @@ and sees what will happen before anything changes:
 
 One trial per account.
 
+Switching plans:
+- **Monthly ↔ yearly** ("Change plan" on the Account page): switches today. Monthly → yearly
+  charges the year now, less credit for the unused part of the month; yearly → monthly turns
+  the unused part of the year into account credit that pays the monthly charges.
+- **Sale Pass → Pro:** subscribing while a pass is running doesn't charge until the pass ends
+  (Stripe needs that to be at least 48 hours away; otherwise billing starts now). No free trial
+  on top of a pass. Pass holders can also add another 30 days.
+- **Pro → Sale Pass:** cancel Pro in Manage billing; it runs to the end of the paid period,
+  then buy a pass.
+
 Without a plan (trial canceled, subscription ended, pass expired), the seller's sales stay up,
 but they can't add sales or items, their sales leave Find yard sales, and buyers see every
 item as first come, first served. A seller with a live subscription has to cancel it before
@@ -210,7 +220,8 @@ How it fits together:
   check it too.
 - `/api/billing/checkout` (Stripe Checkout, subscription or one-time), `/api/billing/return`
   (applies the result right away), `/api/billing/portal` (Stripe's customer portal: card,
-  receipts, cancel), `/api/billing/upgrade` (end the trial early).
+  receipts, cancel), `/api/billing/upgrade` (end the trial early), `/api/billing/change`
+  (switch monthly ↔ yearly).
 - The webhook keeps `account_billing` in sync from `customer.subscription.*` events and
   records Sale Passes (`grant_sale_pass`, one row per Checkout in `sale_passes`).
 - Prices live in `src/lib/billing.ts` (`PRICES`); Checkout creates them on the fly, so there's

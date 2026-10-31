@@ -13,6 +13,12 @@ export const PRICES: Record<BillingChoice, { cents: number; label: string; name:
   pass: { cents: 1499, label: "$14.99 once", name: "Yard Sale QR Sale Pass (30 days)" },
 };
 
+/** "$7.99", "$59": a plan's price without the period. */
+export function priceText(choice: BillingChoice): string {
+  const cents = PRICES[choice].cents;
+  return `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`;
+}
+
 export const TRIAL_DAYS = 7;
 export const PASS_DAYS = 30;
 
@@ -64,6 +70,8 @@ export function subscriptionCheckoutParams(o: {
   origin: string;
   withTrial: boolean;
   returnTo: string;
+  /** Unix seconds: start billing then instead of now (when a Sale Pass is still running). */
+  startAt?: number | null;
 }): Stripe.Checkout.SessionCreateParams {
   const price = PRICES[o.interval];
   return {
@@ -83,7 +91,13 @@ export function subscriptionCheckoutParams(o: {
     ],
     subscription_data: {
       metadata: { user_id: o.userId },
-      ...(o.withTrial
+      ...(o.startAt
+        ? {
+            // nothing is charged until the pass runs out
+            trial_end: o.startAt,
+            trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
+          }
+        : o.withTrial
         ? {
             trial_period_days: TRIAL_DAYS,
             trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
@@ -95,6 +109,18 @@ export function subscriptionCheckoutParams(o: {
     success_url: billingReturnUrl(o.origin, o.returnTo),
     cancel_url: billingNoticeUrl(o.origin, o.returnTo, "canceled"),
   };
+}
+
+/** Stripe only lets Checkout delay the first charge if it's at least 48 hours
+ * away; a pass ending sooner than that just overlaps the new subscription. */
+const MIN_DELAYED_START_MS = 48 * 60 * 60 * 1000;
+
+/** When a seller with a Sale Pass subscribes, when billing should start
+ * (unix seconds), or null to start now. */
+export function subscriptionStartAfterPass(passExpiresAt: string | null | undefined, now = Date.now()): number | null {
+  if (!passExpiresAt) return null;
+  const ends = new Date(passExpiresAt).getTime();
+  return ends - now >= MIN_DELAYED_START_MS ? Math.floor(ends / 1000) : null;
 }
 
 /** Stripe Checkout settings for a one-time 30-day Sale Pass. When bought

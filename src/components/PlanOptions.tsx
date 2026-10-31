@@ -1,5 +1,5 @@
 import type { AccountBilling } from "@/lib/types";
-import { PASS_DAYS, PRICES, TRIAL_DAYS, TRIAL_LIMITS, UPGRADE_HREF } from "@/lib/billing";
+import { PASS_DAYS, PRICES, TRIAL_DAYS, TRIAL_LIMITS, UPGRADE_HREF, subscriptionStartAfterPass } from "@/lib/billing";
 
 /** The plan choices for a seller without one: start the trial (monthly or
  * yearly), or buy a one-time Sale Pass. Plain form posts to Stripe Checkout. */
@@ -7,11 +7,17 @@ export default function PlanOptions({
   billing,
   returnTo,
 }: {
-  billing: Pick<AccountBilling, "trial_used"> | null;
+  billing: Pick<AccountBilling, "trial_used" | "pass_expires_at"> | null;
   /** Where to land after Checkout. */
   returnTo: string;
 }) {
-  const trial = !billing?.trial_used;
+  // with a Sale Pass still running, a new subscription starts billing when it ends
+  const startAt = subscriptionStartAfterPass(billing?.pass_expires_at);
+  const startsOn = startAt
+    ? new Date(startAt * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : null;
+  const passActive = !!billing?.pass_expires_at && new Date(billing.pass_expires_at) > new Date();
+  const trial = !billing?.trial_used && !passActive;
   const yearlySaving = Math.round((1 - PRICES.year.cents / (PRICES.month.cents * 12)) * 100);
 
   return (
@@ -20,9 +26,11 @@ export default function PlanOptions({
         <div className="font-bold text-sm">⭐ Pro {trial && <span className="text-grass-dark">— {TRIAL_DAYS} days free</span>}</div>
         <p className="text-xs opacity-75 mt-1 mb-2">
           Unlimited sales and items, Holds, Buy Now, and a listing in Find yard sales.{" "}
-          {trial
-            ? `Card required; you won't be charged if you cancel within ${TRIAL_DAYS} days. Cancel anytime.`
-            : "Cancel anytime."}
+          {startsOn
+            ? `Subscribe now and keep everything after your Sale Pass — you won't be charged until it ends on ${startsOn}. Cancel anytime.`
+            : trial
+              ? `Card required; you won't be charged if you cancel within ${TRIAL_DAYS} days. Cancel anytime.`
+              : "Cancel anytime."}
         </p>
         <div className="flex gap-2 flex-wrap">
           <CheckoutButton choice="month" returnTo={returnTo} primary>
@@ -44,10 +52,12 @@ export default function PlanOptions({
       <div className="bg-white border-2 border-cardboard-dark/50 rounded-lg p-3">
         <div className="font-bold text-sm">🎟️ Sale Pass</div>
         <p className="text-xs opacity-75 mt-1 mb-2">
-          Just one sale? Everything in Pro for {PASS_DAYS} days, paid once. No subscription — it simply ends.
+          {passActive
+            ? `Need more time? Each pass adds ${PASS_DAYS} days to the one you have.`
+            : `Just one sale? Everything in Pro for ${PASS_DAYS} days, paid once. No subscription — it simply ends.`}
         </p>
         <CheckoutButton choice="pass" returnTo={returnTo}>
-          Get a Sale Pass · {PRICES.pass.label}
+          {passActive ? `Add ${PASS_DAYS} days` : "Get a Sale Pass"} · {PRICES.pass.label}
         </CheckoutButton>
       </div>
     </div>

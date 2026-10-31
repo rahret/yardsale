@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { billingRedirect, withBilling } from "@/lib/billingRoute";
 import { ensureCustomer } from "@/lib/billingServer";
-import { hasLiveSubscription, passCheckoutParams, subscriptionCheckoutParams } from "@/lib/billing";
+import {
+  hasLiveSubscription,
+  passCheckoutParams,
+  subscriptionCheckoutParams,
+  subscriptionStartAfterPass,
+} from "@/lib/billing";
 import { safeRedirectPath } from "@/lib/utils";
 
 // "Start free trial" / "Subscribe" / "Get a Sale Pass" buttons (form posts
@@ -17,11 +22,12 @@ export async function POST(request: NextRequest) {
 
     const { data: billing } = await admin
       .from("account_billing")
-      .select("subscription_status, stripe_subscription_id, trial_used")
+      .select("subscription_status, stripe_subscription_id, trial_used, pass_expires_at")
       .eq("user_id", user.id)
       .maybeSingle();
     if (choice !== "pass" && hasLiveSubscription(billing)) return billingRedirect("already", returnTo);
 
+    const passRunning = !!billing?.pass_expires_at && new Date(billing.pass_expires_at) > new Date();
     const customerId = await ensureCustomer(stripe, admin, user);
     const session = await stripe.checkout.sessions.create(
       choice === "pass"
@@ -38,7 +44,10 @@ export async function POST(request: NextRequest) {
             userId: user.id,
             origin,
             returnTo,
-            withTrial: !billing?.trial_used,
+            // no free trial on top of a Sale Pass that's still running
+            withTrial: !billing?.trial_used && !passRunning,
+            // a Sale Pass that's still running: start billing when it ends
+            startAt: subscriptionStartAfterPass(billing?.pass_expires_at),
           })
     );
     return NextResponse.redirect(session.url!, { status: 303 });
