@@ -142,6 +142,32 @@ describe("handleStripeEvent — seller billing", () => {
     expect(rpc).not.toHaveBeenCalledWith("complete_order", expect.anything());
   });
 
+  it("ends the trial when a Sale Pass is bought from it", async () => {
+    const { admin, upserts } = fakeBillingAdmin({ user_id: "user-1", plan: "pro", stripe_subscription_id: "sub_1" });
+    const cancel = vi.fn(async () => subscription({ status: "canceled" }));
+    const retrieve = vi.fn(async () => subscription());
+    const stripe = { subscriptions: { retrieve, cancel } } as unknown as Stripe;
+    const session = {
+      id: "cs_pass2",
+      customer: "cus_1",
+      payment_status: "paid",
+      amount_total: 1499,
+      metadata: { kind: "sale_pass", user_id: "user-1", end_trial_subscription: "sub_1" },
+    };
+    expect(await handleStripeEvent(event("checkout.session.completed", session), stripe, admin as never)).toBe(
+      "sale pass granted, trial ended"
+    );
+    expect(cancel).toHaveBeenCalledWith("sub_1");
+    expect(upserts[0]).toMatchObject({ subscription_status: "canceled", plan: "none" });
+
+    // the webhook and the return page both apply it; the second time the trial is already over
+    retrieve.mockResolvedValueOnce(subscription({ status: "canceled" }));
+    expect(await handleStripeEvent(event("checkout.session.completed", session), stripe, admin as never)).toBe(
+      "sale pass granted"
+    );
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores expired billing checkouts", async () => {
     const { admin, upserts } = fakeBillingAdmin();
     const { stripe } = fakeStripe();
