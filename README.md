@@ -182,7 +182,7 @@ There's no free tier. Sellers choose one of:
 | --- | --- | --- |
 | **Free trial** of Pro | 7 days, card required, cancel anytime | 1 sale, up to 25 items, first come, first served only |
 | **Pro** | $7.99/month or $59/year | Unlimited sales and items, Holds, Buy Now, listing in Find yard sales |
-| **Sale Pass** | $9.99 once | Everything in Pro for 30 days; no subscription (a second pass adds 30 more days) |
+| **Sale Pass** | $14.99 once | Everything in Pro for 30 days; no subscription (a second pass adds 30 more days) |
 
 During the trial, the locked features (more sales or items, Holds, Buy Now, Find yard sales)
 are still shown, with a 🔒 Pro badge and a link to the plans. "Unlock everything now" on the

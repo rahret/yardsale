@@ -10,7 +10,7 @@ export type BillingChoice = "month" | "year" | "pass";
 export const PRICES: Record<BillingChoice, { cents: number; label: string; name: string }> = {
   month: { cents: 799, label: "$7.99/month", name: "Yard Sale QR Pro (monthly)" },
   year: { cents: 5900, label: "$59/year", name: "Yard Sale QR Pro (yearly)" },
-  pass: { cents: 999, label: "$9.99 once", name: "Yard Sale QR Sale Pass (30 days)" },
+  pass: { cents: 1499, label: "$14.99 once", name: "Yard Sale QR Sale Pass (30 days)" },
 };
 
 export const TRIAL_DAYS = 7;

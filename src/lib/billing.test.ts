@@ -80,7 +80,7 @@ describe("Checkout settings", () => {
   it("sells the Sale Pass as a one-time payment", () => {
     const p = passCheckoutParams({ ...base, returnTo: "/dashboard/account#plan" });
     expect(p.mode).toBe("payment");
-    expect(p.line_items?.[0].price_data?.unit_amount).toBe(999);
+    expect(p.line_items?.[0].price_data?.unit_amount).toBe(1499);
     expect(p.metadata).toEqual({ kind: "sale_pass", user_id: "user-1" });
   });
 

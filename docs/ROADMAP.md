@@ -138,7 +138,7 @@ _Last updated: 2026-10-30_
   - _Done (pending merge):_ **7-day free trial** of Pro (card required, cancel anytime) limited to
     1 sale, 25 items and first come, first served — Holds, Buy Now, Find yard sales and more
     sales/items stay visible with a 🔒 Pro badge. **Pro $7.99/mo or $59/yr** unlocks
-    everything; **Sale Pass $9.99** = everything for 30 days, paid once. Stripe Checkout,
+    everything; **Sale Pass $14.99** = everything for 30 days, paid once. Stripe Checkout,
     customer portal (card, receipts, cancel), "Unlock everything now" (ends the trial early),
     webhook sync, limits enforced in the database. Lapsed sellers keep their sales up but
     can't add to them; holds/Buy Now/directory turn off. Complimentary accounts via SQL.
