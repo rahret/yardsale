@@ -55,7 +55,7 @@ describe.skipIf(!port)("Stripe API payloads (stripe-mock)", () => {
   });
 
   it("seller plans: trial subscription, Sale Pass, portal and ending a trial early are accepted", async () => {
-    const base = { customerId: "cus_123", userId: "u1", origin: "https://x.com", returnTo: "/dashboard/welcome" };
+    const base = { customerId: "cus_123", userId: "u1", origin: "https://x.com", returnTo: "/dashboard/welcome", productId: "prod_123" };
     const sub = await stripe.checkout.sessions.create(subscriptionCheckoutParams({ ...base, interval: "month", withTrial: true }));
     expect(sub.object).toBe("checkout.session");
     const year = await stripe.checkout.sessions.create(subscriptionCheckoutParams({ ...base, interval: "year", withTrial: false }));

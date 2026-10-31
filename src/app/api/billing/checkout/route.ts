@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { billingRedirect, withBilling } from "@/lib/billingRoute";
-import { ensureCustomer } from "@/lib/billingServer";
+import { ensureCustomer, ensureProduct } from "@/lib/billingServer";
 import {
   hasLiveSubscription,
   passCheckoutParams,
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
 
     const passRunning = !!billing?.pass_expires_at && new Date(billing.pass_expires_at) > new Date();
     const customerId = await ensureCustomer(stripe, admin, user);
+    const productId = await ensureProduct(stripe, choice);
     const session = await stripe.checkout.sessions.create(
       choice === "pass"
         ? passCheckoutParams({
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
             userId: user.id,
             origin,
             returnTo,
+            productId,
             endTrialSubscription: billing?.subscription_status === "trialing" ? billing.stripe_subscription_id : null,
           })
         : subscriptionCheckoutParams({
@@ -45,6 +47,7 @@ export async function POST(request: NextRequest) {
             origin,
             returnTo,
             // no free trial on top of a Sale Pass that's still running
+            productId,
             withTrial: !billing?.trial_used && !passRunning,
             // a Sale Pass that's still running: start billing when it ends
             startAt: subscriptionStartAfterPass(billing?.pass_expires_at),

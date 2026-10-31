@@ -56,13 +56,19 @@ describe("hasLiveSubscription", () => {
 });
 
 describe("Checkout settings", () => {
-  const base = { customerId: "cus_1", userId: "user-1", origin: "https://yardsaleqr.example.com" };
+  const base = { customerId: "cus_1", userId: "user-1", origin: "https://yardsaleqr.example.com", productId: "yardsaleqr_pro_month" };
 
   it("starts a 7-day trial with a card required", () => {
     const p = subscriptionCheckoutParams({ ...base, interval: "month", withTrial: true, returnTo: "/dashboard/welcome" });
     expect(p.mode).toBe("subscription");
     expect(p.payment_method_collection).toBe("always");
-    expect(p.line_items?.[0].price_data).toMatchObject({ unit_amount: 799, recurring: { interval: "month" } });
+    expect(p.line_items?.[0].price_data).toMatchObject({
+      unit_amount: 799,
+      recurring: { interval: "month" },
+      // filed under the plan's fixed product, not a new one per checkout
+      product: "yardsaleqr_pro_month",
+    });
+    expect(p.line_items?.[0].price_data).not.toHaveProperty("product_data");
     expect(p.subscription_data?.trial_period_days).toBe(7);
     expect(p.subscription_data?.metadata).toEqual({ user_id: "user-1" });
     expect(p.success_url).toBe(

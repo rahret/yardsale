@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { billingRedirect, withBilling } from "@/lib/billingRoute";
-import { ensureProProduct, syncSubscription } from "@/lib/billingServer";
+import { ensureProduct, syncSubscription } from "@/lib/billingServer";
 import { PRICES } from "@/lib/billing";
 
 // "Change plan" for Pro subscribers (choice=month|year). Switches today:
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         id: item.id,
         price_data: {
           currency: "usd",
-          product: await ensureProProduct(stripe, choice),
+          product: await ensureProduct(stripe, choice),
           unit_amount: PRICES[choice].cents,
           recurring: { interval: choice },
         },

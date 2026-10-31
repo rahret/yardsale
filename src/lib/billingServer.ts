@@ -1,7 +1,15 @@
 import "server-only";
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { PASS_DAYS, PRICES, isLiveStatus, subscriptionBillingFields } from "./billing";
+import {
+  type BillingChoice,
+  PASS_DAYS,
+  PRICES,
+  PRODUCT_DESCRIPTIONS,
+  PRODUCT_IDS,
+  isLiveStatus,
+  subscriptionBillingFields,
+} from "./billing";
 
 /** The seller's Stripe customer, created on first use. */
 export async function ensureCustomer(
@@ -27,14 +35,22 @@ export async function ensureCustomer(
   return customer.id;
 }
 
-/** A Stripe product for each Pro billing period, created on first use (used
- * when a trial seller switches period while upgrading). */
-export async function ensureProProduct(stripe: Stripe, interval: "month" | "year"): Promise<string> {
-  const id = `yardsaleqr_pro_${interval}`;
+/** The plan's fixed Stripe product (PRODUCT_IDS), created on first use in
+ * each Stripe mode (test and live). */
+export async function ensureProduct(stripe: Stripe, choice: BillingChoice): Promise<string> {
+  const id = PRODUCT_IDS[choice];
   try {
     return (await stripe.products.retrieve(id)).id;
-  } catch {
-    return (await stripe.products.create({ id, name: PRICES[interval].name })).id;
+  } catch (e) {
+    if (!(e instanceof Error && "code" in e && e.code === "resource_missing")) throw e;
+  }
+  try {
+    const description = PRODUCT_DESCRIPTIONS[choice];
+    return (await stripe.products.create({ id, name: PRICES[choice].name, ...(description ? { description } : {}) })).id;
+  } catch (e) {
+    // two checkouts created it at the same moment
+    if (e instanceof Error && "code" in e && e.code === "resource_already_exists") return id;
+    throw e;
   }
 }
 

@@ -19,6 +19,19 @@ export function priceText(choice: BillingChoice): string {
   return `$${(cents / 100).toFixed(cents % 100 ? 2 : 0)}`;
 }
 
+/** One fixed Stripe product per plan, so every subscription and pass is filed
+ * under the same product in Stripe's reports. Prices stay here in PRICES and
+ * are sent with each checkout; the products are created on first use. */
+export const PRODUCT_IDS: Record<BillingChoice, string> = {
+  month: "yardsaleqr_pro_month",
+  year: "yardsaleqr_pro_year",
+  pass: "yardsaleqr_sale_pass",
+};
+
+export const PRODUCT_DESCRIPTIONS: Partial<Record<BillingChoice, string>> = {
+  pass: "Everything in Pro for 30 days. No subscription — it just ends.",
+};
+
 export const TRIAL_DAYS = 7;
 export const PASS_DAYS = 30;
 
@@ -72,6 +85,8 @@ export function subscriptionCheckoutParams(o: {
   returnTo: string;
   /** Unix seconds: start billing then instead of now (when a Sale Pass is still running). */
   startAt?: number | null;
+  /** The plan's Stripe product (PRODUCT_IDS; see ensureProduct). */
+  productId: string;
 }): Stripe.Checkout.SessionCreateParams {
   const price = PRICES[o.interval];
   return {
@@ -85,7 +100,7 @@ export function subscriptionCheckoutParams(o: {
           currency: "usd",
           unit_amount: price.cents,
           recurring: { interval: o.interval },
-          product_data: { name: price.name },
+          product: o.productId,
         },
       },
     ],
@@ -132,6 +147,8 @@ export function passCheckoutParams(o: {
   origin: string;
   returnTo: string;
   endTrialSubscription?: string | null;
+  /** The Sale Pass's Stripe product (PRODUCT_IDS; see ensureProduct). */
+  productId: string;
 }): Stripe.Checkout.SessionCreateParams {
   return {
     mode: "payment",
@@ -142,10 +159,7 @@ export function passCheckoutParams(o: {
         price_data: {
           currency: "usd",
           unit_amount: PRICES.pass.cents,
-          product_data: {
-            name: PRICES.pass.name,
-            description: `Everything in Pro for ${PASS_DAYS} days. No subscription — it just ends.`,
-          },
+          product: o.productId,
         },
       },
     ],

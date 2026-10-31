@@ -224,8 +224,10 @@ How it fits together:
   (switch monthly ↔ yearly).
 - The webhook keeps `account_billing` in sync from `customer.subscription.*` events and
   records Sale Passes (`grant_sale_pass`, one row per Checkout in `sale_passes`).
-- Prices live in `src/lib/billing.ts` (`PRICES`); Checkout creates them on the fly, so there's
-  nothing to set up in Stripe's product catalog.
+- Prices live in `src/lib/billing.ts` (`PRICES`) and are sent with each checkout, so there's
+  nothing to set up in Stripe. Each plan is filed under one fixed Stripe product
+  (`yardsaleqr_pro_month`, `yardsaleqr_pro_year`, `yardsaleqr_sale_pass`), created
+  automatically the first time it's needed in test mode and again in live mode.
 - New sellers pick a plan on `/dashboard/welcome` before the setup wizard.
 
 Setup (in addition to the Buy Now setup below):
