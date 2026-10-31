@@ -15,9 +15,13 @@ export default async function SaleAdminPage({
 }) {
   const supabase = createClient();
 
-  const { data: sale } = await supabase.from("sales").select("*").eq("id", params.saleId).single();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: sale } = await supabase.from("sales").select("*").eq("id", params.saleId).maybeSingle();
 
-  if (!sale) notFound();
+  // published sales are readable by anyone, so check ownership explicitly
+  if (!sale || !user || sale.owner_id !== user.id) notFound();
 
   const { data: items } = await supabase
     .from("items")
