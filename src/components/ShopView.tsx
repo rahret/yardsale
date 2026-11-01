@@ -449,6 +449,13 @@ function DetailSheet({
       setError(data?.error || "Couldn't reserve this item.");
       return;
     }
+    // let the seller know by email (fire and forget)
+    fetch("/api/alerts/hold", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId: item.id }),
+      keepalive: true,
+    }).catch(() => {});
     try {
       localStorage.setItem("garage-sale-my-info", JSON.stringify({ name: name.trim(), phone: phone.trim() }));
     } catch {}

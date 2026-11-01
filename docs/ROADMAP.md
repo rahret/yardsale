@@ -10,7 +10,7 @@ the sale is worth visiting.
 
 **Status key:** ✅ Done · 🟡 Partly done · ⬜ Not started
 
-_Last updated: 2026-10-30_
+_Last updated: 2026-11-01_
 
 ---
 
@@ -28,12 +28,14 @@ _Last updated: 2026-10-30_
   category ("furniture within 5 miles, Saturday"). That needs map coordinates for each sale,
   which the database doesn't store yet. It's also your strongest reason for buyers to come
   back, and a natural paid feature: promote a sale to the top of the list.
-  - _Done (pending merge):_ new front page (name, short description, big **Buyers** and
+  - _Shipped in #20:_ new front page (name, short description, big **Buyers** and
     **New Sellers** buttons). **Buyers → `/find`:** search by ZIP, city or street, filter by
     Today / This weekend / Next 7 days and category; cards with photos, open status, street
     (no house number) and top categories. **New Sellers → `/sell`:** benefits and Get started.
     Sellers opt in with "List my sale" (existing sales start unlisted; new sales start listed).
-  - _Done (pending merge):_ map coordinates for each sale (US Census geocoder, OpenStreetMap
+    _Since #29:_ buyers must enter a place or use their location before any sales are listed;
+    _since #28:_ only sales whose address was found on the map are listed.
+  - _Shipped in #21:_ map coordinates for each sale (US Census geocoder, OpenStreetMap
     fallback), "within 5/10/25/50 miles" of a ZIP/city or **Use my location**, nearest first
     with distance on each card, a **Map** view (OpenStreetMap; pins rounded to ~a block when
     the house number is hidden), and server-side paging (24 at a time, Show more).
@@ -44,7 +46,7 @@ _Last updated: 2026-10-30_
   for neighborhood boards.
 - 🟡 **There's no "remind me".** Let buyers add the sale to their calendar, or follow it and get
   a message the morning it opens.
-  - _Done (pending merge):_ "Add to calendar" button (an .ics file with each remaining sale
+  - _Shipped in #16:_ "Add to calendar" button (an .ics file with each remaining sale
     day, address and link).
   - _Still to do:_ follow a sale and get a message the morning it opens.
 
@@ -53,17 +55,17 @@ _Last updated: 2026-10-30_
 - ✅ **There's no quick summary at the top of the page.** Buyers decide in about five seconds.
   Add a cover photo, the top categories ("Furniture · Tools · Kids' clothes"), the item count
   and the total value, and two or three featured items, all before the full item list.
-  - _Done (pending merge):_ "What's here" categories, item count, and up to 3 highlights
+  - _Shipped in #16:_ "What's here" categories, item count, and up to 3 highlights
     (seller stars items with "☆ Feature"; otherwise the priciest items with photos). The
     highlight photos act as the cover. Total value was deliberately left out.
 - ✅ **The page doesn't say whether the sale is open right now.** Add "Open now · closes 2P",
   "Opens tomorrow 8A" or "Ended", plus a short note from the seller ("Everything half off
   after noon", "Fill a bag for $5").
-  - _Done (pending merge):_ open-status pill (updates every minute, seller's time zone) and a
+  - _Shipped in #16:_ open-status pill (updates every minute, seller's time zone) and a
     "Note to buyers" the seller can post or change any time.
 - ✅ **Sale-level details are missing:** payment methods (these are saved on the Account page
   but not shown publicly yet), early-bird policy, parking, and rain plan.
-  - _Done (pending merge):_ per-sale payment methods shown as icons only (never handles;
+  - _Shipped in #16:_ per-sale payment methods shown as icons only (never handles;
     pre-ticked from the Account page).
   - _Decided against:_ early birds, parking and rain plan fields — tried, then removed to
     keep the page simple.
@@ -77,9 +79,13 @@ _Last updated: 2026-10-30_
 
 ## 3. Helping sellers organize the sale
 
-- ⬜ **The seller isn't told about reservations.** Nothing sends a text or email when someone
+- 🟡 **The seller isn't told about reservations.** Nothing sends a text or email when someone
   reserves an item, so the seller has to keep checking the dashboard. The README already
   lists texting buyers about expiring holds as a next step.
+  - _Done (pending merge):_ email alerts (ZeptoMail) for every hold and Buy Now purchase —
+    item, buyer, phone or pickup code, and when a hold runs out; on/off on the Account page.
+  - _Still to do:_ text-message alerts; a morning-of summary; texting buyers about expiring
+    holds.
 - ⬜ **Adding items is slow.** Typing in 80 items is the biggest reason sellers will give up. A
   photo-first flow would help: snap photos in a row and fill in each item from the photo,
   with AI suggesting a name, category and price.
@@ -109,7 +115,7 @@ _Last updated: 2026-10-30_
 
 ## 3½. Onboarding
 
-- ✅ _Done (pending merge):_ new sellers land in a 3-step **welcome wizard** after confirming
+- ✅ _Shipped in #22:_ new sellers land in a 3-step **welcome wizard** after confirming
   their email (name → address → dates; creates a draft sale), a **Getting started checklist**
   on the sale page (address, dates, 3+ items, a photo, go Live, print sign, share — each with
   a jump button; hideable), and an empty dashboard that points to the wizard.
@@ -135,14 +141,14 @@ _Last updated: 2026-10-30_
 ## 5. Monetization & payments
 
 - ✅ **Subscriptions (seller plans).** No free tier.
-  - _Done (pending merge):_ **7-day free trial** of Pro (card required, cancel anytime) limited to
+  - _Shipped in #22, #24, #25:_ **7-day free trial** of Pro (card required, cancel anytime) limited to
     1 sale, 25 items and first come, first served — Holds, Buy Now, Find yard sales and more
     sales/items stay visible with a 🔒 Pro badge. **Pro $7.99/mo or $59/yr** unlocks
     everything; **Sale Pass $14.99** = everything for 30 days, paid once. Stripe Checkout,
     customer portal (card, receipts, cancel), "Unlock everything now" (ends the trial early),
     webhook sync, limits enforced in the database. Lapsed sellers keep their sales up but
     can't add to them; holds/Buy Now/directory turn off. Complimentary accounts via SQL.
-  - _Done (pending merge):_ **Change plan** (monthly ↔ yearly, prorated), and subscribing
+  - _Shipped in #27:_ **Change plan** (monthly ↔ yearly, prorated), and subscribing
     from a Sale Pass starts billing when the pass ends.
   - _Still to do:_ maybe **Business ~$24.99/mo** for estate-sale companies; Pro-only extras
     (visit stats, extra sign layouts, AI item entry, promoted listings).
@@ -150,7 +156,7 @@ _Last updated: 2026-10-30_
   Cash App, PayPal, Zelle) on the Account page.
   - _Done (#16):_ each sale shows which methods it accepts, as icons only. Handles stay
     private.
-  - _Done (pending merge):_ **Buy Now** through Stripe — card, Apple Pay, Google Pay and
+  - _Shipped in #17, #19, #26:_ **Buy Now** through Stripe — card, Apple Pay, Google Pay and
     Cash App Pay. Sellers connect payouts (Stripe Express) on the Account page, then choose
     **how buyers get each item**: First come, first served (default), Hold, or Buy Now —
     exactly one (bulk items are always first come; Buy Now needs $3+). Buyers pay, get a
@@ -160,15 +166,19 @@ _Last updated: 2026-10-30_
   - _Decided:_ platform fee 1.5% + 15¢ on top of Stripe's fee; Buy Now minimum $3.
   - _Still to decide:_ no-show policy
     (default: seller keeps payment and can refund by hand), legal/tax review before launch.
-- ⬜ **Email notifications.** Purchase and hold alerts to sellers; Stripe's own receipt
-  covers buyers for now. Needs an email service (e.g. Resend).
+- ✅ **Email notifications.** Purchase and hold alerts to sellers; Stripe's own receipt
+  covers buyers for now.
+  - _Done (pending merge):_ sent through **ZeptoMail** (Zoho) from the app's own domain;
+    each alert is sent once even if Stripe repeats an event.
 
 ## 6. Other ideas & follow-ups
 
 - ⬜ Seller-side live updates on the dashboard (reservations appear without reloading).
-- ⬜ Item photos are stored at full phone size; shrinking them on upload would speed up the
-  buyer page and save storage.
-- ⬜ Deleting an item doesn't remove its photo files from storage (account deletion does).
+- ✅ Item photos are stored at full phone size; shrinking them on upload would speed up the
+  buyer page and save storage. _Done (pending merge):_ scaled to 1,600 px JPEG in the
+  browser before upload (also strips the photo's GPS location).
+- ✅ Deleting an item doesn't remove its photo files from storage (account deletion does).
+  _Done (pending merge)._
 
 ---
 
@@ -181,4 +191,17 @@ _Last updated: 2026-10-30_
 | #14 | Link previews, share tools, item links, visit counts by source, `https://` fix for the site URL |
 | #15 | Upright photos and no past dates in link previews |
 | #16 | Buyer page Share button fix; buyer-page upgrade (open status, seller's note, what's here + highlights, payment icons, add to calendar); this roadmap |
-| _pending_ | Buy Now with Stripe (card, Apple Pay, Google Pay, Cash App Pay), seller payouts, online orders with pickup codes and refunds |
+| #17 | Buy Now with Stripe (card, Apple Pay, Google Pay, Cash App Pay), seller payouts, online orders with pickup codes and refunds |
+| #18 | Stripe's own reason shown when payout setup fails |
+| #19 | "First come, first served" option per item; server permission fix for Stripe setup |
+| #20 | New front page (Buyers / New Sellers), Find yard sales directory, hamburger menu |
+| #21 | Distance search and map view, menu on sale pages, payouts dashboard in a new tab |
+| #22 | Seller plans (7-day trial, Pro, Sale Pass) and onboarding for new sellers |
+| #23 | Dashboard shows only the seller's own sales |
+| #24 | Sale Pass raised to $14.99 |
+| #25 | "Unlock everything now" asks which plan first |
+| #26 | Buy Now platform fee 1.5% + 15¢ and a $3 minimum |
+| #27 | Change plan (monthly ↔ yearly), subscribing from a Sale Pass, one Stripe product per plan |
+| #28 | Logins kept fresh (middleware fix), address checks, address on the Account page |
+| #29 | Find yard sales requires a place or the buyer's location |
+| _pending_ | Seller email alerts (ZeptoMail), smaller photo uploads, photo files removed with their item |

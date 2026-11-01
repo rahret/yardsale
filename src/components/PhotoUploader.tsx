@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ItemPhoto } from "@/lib/types";
+import { shrinkImage } from "@/lib/shrinkImage";
 
 const BUCKET = "item-photos";
 
@@ -36,10 +37,12 @@ export default function PhotoUploader({
     let nextPosition = photos.length;
     const newPhotos: ItemPhoto[] = [];
 
-    for (const file of list) {
+    for (const original of list) {
+      const file = await shrinkImage(original);
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
       const path = `${saleId}/${itemId}/${crypto.randomUUID()}-${safeName}`;
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
+        contentType: file.type,
         cacheControl: "3600",
         upsert: false,
       });

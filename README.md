@@ -265,6 +265,41 @@ Setup (in addition to the Buy Now setup below):
    on conflict (user_id) do update set plan = 'comp';
    ```
 
+## Seller email alerts (ZeptoMail)
+
+Sellers get an email when a buyer **pays with Buy Now** (item, amount, what they receive, the
+pickup code, the buyer's name and email — reply goes to the buyer) or **puts a hold** on an item
+(who, their phone, and when the hold runs out, in the sale's time zone). Alerts go to the
+seller's login email and can be turned off on the Account page.
+
+- Sent through [ZeptoMail](https://www.zoho.com/zeptomail/) (Zoho's service for app email) by
+  `src/lib/email.ts`; the content is in `src/lib/alertEmails.ts`, the when in `src/lib/alerts.ts`.
+- Purchases are sent from the Stripe webhook / order page; holds by `/api/alerts/hold`, which the
+  buyer's page calls after a hold succeeds (it only emails about holds from the last few
+  minutes).
+- Each alert is claimed in the database (`seller_notified_at`) before it's sent, so it goes out
+  once even if Stripe repeats an event; a failed send is released and retried on the next try.
+- Without the settings below, nothing is sent (and nothing breaks).
+
+Setup:
+
+1. Sign up at zeptomail.zoho.com with your Zoho account and add your domain
+   (e.g. `rahretinnovationlabs.com`). Add the DNS records it shows (DKIM and a bounce CNAME)
+   and wait for it to verify.
+2. Create a **Mail Agent** and copy its **Send Mail token**.
+3. In Vercel, set:
+   - `ZEPTOMAIL_TOKEN` — the token (with or without the `Zoho-enczapikey ` prefix)
+   - `ALERT_FROM_EMAIL` — e.g. `alerts@rahretinnovationlabs.com` (on the verified domain)
+   - optional `ALERT_FROM_NAME` (default "Yard Sale QR"), and `ZEPTOMAIL_API_URL` if your
+     Zoho account is outside the US data centre (e.g. `https://api.zeptomail.eu/v1.1/email`)
+4. Re-run `supabase/schema.sql` (adds `email_alerts` and the `seller_notified_at` columns).
+
+## Photos
+
+Photos are scaled in the browser to at most 1,600 px on the long side and saved as JPEG before
+upload (`src/lib/shrinkImage.ts`), which also applies the camera's rotation and removes EXIF data
+such as the GPS location. Deleting an item removes its photo files from storage.
+
 ## Notes / things to customize
 
 - **SMS reminders** aren't included — buyers just give a phone number shown to the
