@@ -294,6 +294,17 @@ Setup:
      Zoho account is outside the US data centre (e.g. `https://api.zeptomail.eu/v1.1/email`)
 4. Re-run `supabase/schema.sql` (adds `email_alerts` and the `seller_notified_at` columns).
 
+## Sign builder
+
+`/dashboard/sales/[id]/sign` (the **🪧 Sign builder** button in the Share card) designs printed
+signs with a live preview: a title (presets or up to 16 characters), black / red / blue for the
+title and arrow, an arrow (left, right or straight ahead) with a short note, Off/S/M/L sizes for
+the QR code, address and dates, an optional extra line (tagline, top categories or custom),
+landscape or portrait, and one or two signs per sheet. Presets set up a main sign or arrow
+signs in one tap; the last design is remembered per sale on that device. Every size is a share
+of the page (`src/components/SignSheet.tsx`, `src/lib/signDesign.ts`), so the preview matches the
+printout on any paper size.
+
 ## Photos
 
 Photos are scaled in the browser to at most 1,600 px on the long side and saved as JPEG before

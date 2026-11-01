@@ -41,9 +41,15 @@ _Last updated: 2026-11-01_
     the house number is hidden), and server-side paging (24 at a time, Show more).
   - _Still to do:_ promoted listings (paid) — needs a price and checkout decision. Directory
     listing itself is now part of Pro / the Sale Pass.
-- ⬜ **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
+- 🟡 **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
   Add arrow signs ("← YARD SALE, 2 blocks") with a small QR code, plus a quarter-page flyer
   for neighborhood boards.
+  - _Done (pending merge):_ **Sign builder** — title (presets or up to 16 characters), title
+    and arrow colour, arrow left / right / straight ahead with a note ("2 blocks"), S/M/L/off
+    for the QR code, address and dates, an extra line (tagline, categories or custom), "Scan for
+    photos & prices" under the QR code, landscape/portrait, two signs per sheet, one-tap
+    presets, live preview; remembers the last design per sale.
+  - _Still to do:_ quarter-page flyer with item photos; printed price tags.
 - 🟡 **There's no "remind me".** Let buyers add the sale to their calendar, or follow it and get
   a message the morning it opens.
   - _Shipped in #16:_ "Add to calendar" button (an .ics file with each remaining sale
