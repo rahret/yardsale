@@ -47,6 +47,12 @@ create trigger on_auth_user_created
 
 -- extra profile fields edited on the Account page
 alter table public.profiles add column if not exists phone text not null default '';
+-- the seller's own address (private: only they can read their profile row);
+-- pre-fills new sales
+alter table public.profiles add column if not exists street text not null default '';
+alter table public.profiles add column if not exists city text not null default '';
+alter table public.profiles add column if not exists state text not null default '';
+alter table public.profiles add column if not exists zip text not null default '';
 -- how buyers can pay this seller today (before card payments are set up), e.g.
 -- {"cash": true, "venmo": "@jamie", "cashapp": "$jamie", "paypal": "", "zelle": ""}
 alter table public.profiles add column if not exists payment_options jsonb not null default '{"cash": true}';
@@ -746,6 +752,8 @@ as $$
     where s.status = 'live'
       and s.listed
       and public.seller_access(s.owner_id) = 'full'
+      -- only addresses that were found on the map (keeps made-up addresses out)
+      and s.lat is not null and s.lng is not null
       and (p_category is null or exists (
         select 1 from public.items i
         where i.sale_id = s.id and i.status <> 'sold' and lower(i.category) = lower(p_category)))

@@ -1,11 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
-import { geocodeAddress, geocodePlace, publicCoordinates } from "./geocode";
+import { geocodeAddress, geocodePlace, publicCoordinates, verifyAddress } from "./geocode";
 
 const json = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 
-const census = { result: { addressMatches: [{ coordinates: { x: -93.6001, y: 41.7318 }, matchedAddress: "5009 NW 4TH ST, ANKENY, IA, 50023" }] } };
+const census = {
+  result: {
+    addressMatches: [
+      {
+        coordinates: { x: -93.6001, y: 41.7318 },
+        matchedAddress: "5009 NW 4TH ST, ANKENY, IA, 50023",
+        addressComponents: { state: "IA", zip: "50023" },
+      },
+    ],
+  },
+};
 const nominatim = [{ lat: "41.7290", lon: "-93.6050", display_name: "Ankeny, Polk County, Iowa" }];
+const nominatimHouse = [
+  { lat: "41.7290", lon: "-93.6050", addresstype: "house", address: { "ISO3166-2-lvl4": "US-IA", postcode: "50023" } },
+];
 
 describe("geocodeAddress", () => {
   it("uses the Census geocoder for street addresses", async () => {
@@ -17,7 +30,7 @@ describe("geocodeAddress", () => {
   });
 
   it("falls back to OpenStreetMap when Census has no match", async () => {
-    const f = vi.fn((url: string) => (url.includes("census.gov") ? json({ result: { addressMatches: [] } }) : json(nominatim)));
+    const f = vi.fn((url: string) => (url.includes("census.gov") ? json({ result: { addressMatches: [] } }) : json(nominatimHouse)));
     expect(await geocodeAddress({ street: "1 Somewhere", city: "Ankeny", state: "IA", zip: "" }, f as never)).toMatchObject({
       lat: 41.729,
       lng: -93.605,
@@ -30,6 +43,36 @@ describe("geocodeAddress", () => {
     const f = vi.fn(() => json(census));
     expect(await geocodeAddress({ street: "", city: "Ankeny", state: "IA", zip: "" }, f as never)).toBeNull();
     expect(f).not.toHaveBeenCalled();
+  });
+});
+
+describe("verifyAddress", () => {
+  const addr = { street: "5009 NW 4th", city: "Ankeny", state: "IA", zip: "50023" };
+  const noCensus = (osm: unknown) =>
+    vi.fn((url: string) => (url.includes("census.gov") ? json({ result: { addressMatches: [] } }) : json(osm)));
+
+  it("verifies a street-level match in the right state", async () => {
+    const f = vi.fn(() => json(census));
+    expect(await verifyAddress(addr, f as never)).toMatchObject({ status: "verified", lat: 41.7318, zip: "50023" });
+  });
+
+  it("doesn't count a match on just the town or ZIP", async () => {
+    const townOnly = [{ ...nominatim[0], addresstype: "town" }];
+    expect(await verifyAddress({ ...addr, street: "999 Fakeville Blvd" }, noCensus(townOnly) as never)).toEqual({
+      status: "not_found",
+    });
+    expect(await verifyAddress(addr, noCensus([]) as never)).toEqual({ status: "not_found" });
+  });
+
+  it("doesn't count a match in another state", async () => {
+    const elsewhere = { result: { addressMatches: [{ ...census.result.addressMatches[0], addressComponents: { state: "TX" } }] } };
+    const f = vi.fn((url: string) => (url.includes("census.gov") ? json(elsewhere) : json([])));
+    expect(await verifyAddress(addr, f as never)).toEqual({ status: "not_found" });
+  });
+
+  it("says when it couldn't check at all", async () => {
+    const down = vi.fn(() => Promise.reject(new Error("network")));
+    expect(await verifyAddress(addr, down as never)).toEqual({ status: "unavailable" });
   });
 });
 

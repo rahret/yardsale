@@ -115,8 +115,8 @@ reset role;
 
 -- ---- lapsed: existing sale stays, but holds stop and nothing new is added ----
 -- (set up as the server would have while the seller was on Pro)
-insert into public.sales (id, owner_id, slug, status, listed) values
-  ('b5000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000b5', 'lapsed-1', 'live', true);
+insert into public.sales (id, owner_id, slug, status, listed, lat, lng) values
+  ('b5000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000b5', 'lapsed-1', 'live', true, 41.73, -93.60);
 insert into public.items (id, sale_id, name, sell_mode) values
   ('b5100000-0000-0000-0000-000000000001', 'b5000000-0000-0000-0000-000000000001', 'old hold', 'hold');
 insert into public.sale_days (sale_id, date, start_time, end_time) values ('b5000000-0000-0000-0000-000000000001', current_date, '08:00', '14:00');

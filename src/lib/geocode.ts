@@ -4,8 +4,8 @@
  *   for US street addresses), then OpenStreetMap's Nominatim.
  * - Buyer search places (a ZIP code or city): Nominatim, cached in memory.
  *
- * Every lookup has a short timeout and returns null on any failure, so a
- * slow or unavailable service never breaks saving a sale or searching.
+ * Every lookup has a short timeout and never throws, so a slow or
+ * unavailable service never breaks saving a sale or searching.
  */
 
 export interface Coordinates {
@@ -37,21 +37,71 @@ async function getJson(url: string, f: Fetch): Promise<unknown> {
   return res.json();
 }
 
-export async function censusGeocode(address: string, f: Fetch = fetch): Promise<Coordinates | null> {
+/** A street-level match, with the state (and ZIP, when known) it was found in. */
+interface StreetMatch extends Coordinates {
+  state?: string;
+  zip?: string;
+}
+
+/** undefined = the service couldn't be reached; null = it had no match. */
+type Lookup = StreetMatch | null | undefined;
+
+async function censusLookup(address: string, f: Fetch): Promise<Lookup> {
   try {
     const url =
       "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=" +
       encodeURIComponent(address);
     const data = (await getJson(url, f)) as {
-      result?: { addressMatches?: { coordinates?: { x: number; y: number }; matchedAddress?: string }[] };
+      result?: {
+        addressMatches?: {
+          coordinates?: { x: number; y: number };
+          matchedAddress?: string;
+          addressComponents?: { state?: string; zip?: string };
+        }[];
+      };
     };
     const match = data.result?.addressMatches?.[0];
     if (!match?.coordinates) return null;
     const { x: lng, y: lat } = match.coordinates;
-    return valid(lat, lng) ? { lat, lng, label: match.matchedAddress } : null;
+    if (!valid(lat, lng)) return null;
+    return { lat, lng, label: match.matchedAddress, state: match.addressComponents?.state, zip: match.addressComponents?.zip };
   } catch {
-    return null;
+    return undefined;
   }
+}
+
+// Nominatim results that only found the town, ZIP or county, not the street
+const AREA_TYPES = new Set([
+  "city", "town", "village", "hamlet", "municipality", "county", "state", "postcode", "country",
+  "suburb", "neighbourhood", "quarter", "city_district", "district", "administrative", "region", "island",
+]);
+
+async function nominatimStreetLookup(address: string, f: Fetch): Promise<Lookup> {
+  try {
+    const url =
+      "https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=us&q=" +
+      encodeURIComponent(address);
+    const data = (await getJson(url, f)) as {
+      lat: string;
+      lon: string;
+      display_name?: string;
+      addresstype?: string;
+      address?: { "ISO3166-2-lvl4"?: string; postcode?: string };
+    }[];
+    const hit = data?.[0];
+    if (!hit || AREA_TYPES.has(hit.addresstype || "")) return null;
+    const lat = Number(hit.lat);
+    const lng = Number(hit.lon);
+    if (!valid(lat, lng)) return null;
+    const state = hit.address?.["ISO3166-2-lvl4"]?.replace(/^US-/, "");
+    return { lat, lng, label: hit.display_name, state, zip: hit.address?.postcode };
+  } catch {
+    return undefined;
+  }
+}
+
+export async function censusGeocode(address: string, f: Fetch = fetch): Promise<Coordinates | null> {
+  return (await censusLookup(address, f)) ?? null;
 }
 
 export async function nominatimGeocode(query: string, f: Fetch = fetch): Promise<Coordinates | null> {
@@ -69,14 +119,38 @@ export async function nominatimGeocode(query: string, f: Fetch = fetch): Promise
   }
 }
 
-/** A sale's street address → coordinates. */
+export type AddressCheck =
+  | { status: "verified"; lat: number; lng: number; label?: string; zip?: string }
+  | { status: "not_found" }
+  | { status: "unavailable" };
+
+/** Confirms a street address exists: a street-level match (Census first,
+ * then OpenStreetMap) in the state that was entered. Matching only the town
+ * or ZIP doesn't count. "unavailable" means neither service answered, so
+ * the address couldn't be checked either way. */
+export async function verifyAddress(
+  a: { street: string; city: string; state: string; zip: string },
+  f: Fetch = fetch
+): Promise<AddressCheck> {
+  const line = [a.street, a.city, a.state, a.zip].map((s) => (s || "").trim()).filter(Boolean).join(", ");
+  if (!a.street?.trim() || line.length < 6) return { status: "not_found" };
+  const state = (a.state || "").trim().toUpperCase();
+  const inState = (m: StreetMatch) => !m.state || !state || m.state.toUpperCase() === state;
+
+  const census = await censusLookup(line, f);
+  if (census && inState(census)) return { status: "verified", lat: census.lat, lng: census.lng, label: census.label, zip: census.zip };
+  const osm = await nominatimStreetLookup(line, f);
+  if (osm && inState(osm)) return { status: "verified", lat: osm.lat, lng: osm.lng, label: osm.label, zip: osm.zip };
+  return census === undefined && osm === undefined ? { status: "unavailable" } : { status: "not_found" };
+}
+
+/** A sale's street address → coordinates (only for addresses that check out). */
 export async function geocodeAddress(
   a: { street: string; city: string; state: string; zip: string },
   f: Fetch = fetch
 ): Promise<Coordinates | null> {
-  const line = [a.street, a.city, a.state, a.zip].map((s) => (s || "").trim()).filter(Boolean).join(", ");
-  if (!a.street?.trim() || line.length < 6) return null;
-  return (await censusGeocode(line, f)) ?? (await nominatimGeocode(line, f));
+  const check = await verifyAddress(a, f);
+  return check.status === "verified" ? { lat: check.lat, lng: check.lng, label: check.label } : null;
 }
 
 const placeCache = new Map<string, { at: number; value: Coordinates | null }>();

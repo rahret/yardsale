@@ -6,7 +6,7 @@ import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import { PAYMENT_METHODS, type Item, type Order, type SellMode, type Sale, type SaleDay, type SaleStatus, type SavedLocation } from "@/lib/types";
 import { PAYMENT_LABELS, paymentMethodsFromProfile } from "@/lib/saleInfo";
-import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays } from "@/lib/utils";
+import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays, friendlyDbError } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import FitText from "@/components/FitText";
 import ShareSaleCard from "@/components/ShareSaleCard";
@@ -14,6 +14,8 @@ import BuyNowCard from "@/components/BuyNowCard";
 import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
 import { MIN_CHARGE_CENTS, toCents } from "@/lib/fees";
 import { HOUR_OPTIONS, toHour } from "@/lib/hours";
+import { normalizeAddress, addressFormatError } from "@/lib/address";
+import { ADDRESS_NOT_FOUND, checkAddress, sameAddress } from "@/lib/addressCheck";
 import { type Access, TRIAL_LIMITS } from "@/lib/billing";
 import { LockedBadge, UpgradeNote } from "@/components/PlanOptions";
 
@@ -104,6 +106,8 @@ export default function SaleAdmin({
   const [noteStatus, setNoteStatus] = useState("");
   const [savingSale, setSavingSale] = useState(false);
   const [saveError, setSaveError] = useState("");
+  // the address couldn't be found; the seller can still save it (unlisted)
+  const [addressNotFound, setAddressNotFound] = useState(false);
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>(initialSavedLocations);
   const [locationLabel, setLocationLabel] = useState("");
   const [savingLocation, setSavingLocation] = useState(false);
@@ -247,8 +251,9 @@ export default function SaleAdmin({
     setDayRows((prev) => prev.filter((d) => d.key !== key));
   }
 
-  async function saveSaleSettings() {
+  async function saveSaleSettings({ saveUnverified = false }: { saveUnverified?: boolean } = {}) {
     setSaveError("");
+    setAddressNotFound(false);
     const validDays = dayRows.filter((d) => d.date && d.start_time && d.end_time);
     const dates = validDays.map((d) => d.date);
     if (new Set(dates).size !== dates.length) {
@@ -257,20 +262,44 @@ export default function SaleAdmin({
     }
 
     setSavingSale(true);
+
+    // A changed address must look like a real one, and is looked up before
+    // saving. One that can't be found can still be saved on purpose (e.g. a
+    // brand-new street), but stays out of Find yard sales.
+    let address = normalizeAddress(saleForm);
+    let location: { lat: number | null; lng: number | null; listed?: boolean } | null = null;
+    let lookUpLater = false;
+    const blank = !address.street && !address.city && !address.state && !address.zip;
+    if (!blank && !sameAddress(address, sale)) {
+      const check = await checkAddress(address);
+      address = check.address;
+      if (check.status === "invalid") {
+        setSavingSale(false);
+        setSaveError(check.error);
+        return;
+      }
+      if (check.status === "not_found" && !saveUnverified) {
+        setSavingSale(false);
+        setAddressNotFound(true);
+        return;
+      }
+      if (check.status === "verified") location = { lat: check.lat, lng: check.lng };
+      else if (check.status === "not_found") location = { lat: null, lng: null, listed: false };
+      else lookUpLater = true;
+    }
+
     const supabase = createClient();
     const patch = {
       name: saleForm.name.trim().slice(0, 50) || sale.name,
       tagline: saleForm.tagline.trim().slice(0, 75),
-      street: saleForm.street.trim(),
-      city: saleForm.city.trim(),
-      state: saleForm.state.trim(),
-      zip: saleForm.zip.trim(),
+      ...address,
+      ...(location || {}),
       default_reservation_minutes: Number(saleForm.default_reservation_minutes) || 30,
       timezone: browserTimeZone() ?? sale.timezone,
       accepted_payments: PAYMENT_METHODS.filter((m) => saleForm.accepted_payments.includes(m)),
     };
     const { data, error } = await supabase.from("sales").update(patch).eq("id", sale.id).select().single();
-    if (error) setSaveError(error.message);
+    if (error) setSaveError(friendlyDbError(error.message));
 
     await supabase.from("sale_days").delete().eq("sale_id", sale.id);
     let savedDays: SaleDay[] = [];
@@ -286,7 +315,7 @@ export default function SaleAdmin({
           }))
         )
         .select();
-      if (daysError) setSaveError(daysError.message);
+      if (daysError) setSaveError(friendlyDbError(daysError.message));
       savedDays = daysData || [];
     }
     setDayRows(toDayRows(savedDays));
@@ -294,10 +323,9 @@ export default function SaleAdmin({
     setSavingSale(false);
     if (!error && data) {
       setSale(data);
-      const addressChanged = ["street", "city", "state", "zip"].some(
-        (k) => (data as Record<string, unknown>)[k] !== (sale as unknown as Record<string, unknown>)[k]
-      );
-      if (addressChanged || data.lat == null) locateSale();
+      setSaleForm((prev) => ({ ...prev, ...address }));
+      // the lookup service was down, or this sale predates map coordinates
+      if (lookUpLater || (data.lat == null && !location && data.street)) locateSale();
     }
   }
 
@@ -318,26 +346,24 @@ export default function SaleAdmin({
   }
 
   async function saveCurrentLocation() {
-    const street = saleForm.street.trim();
-    if (!street) return;
+    const address = normalizeAddress(saleForm);
+    if (!address.street) return;
+    const formatError = addressFormatError(address);
+    if (formatError) {
+      setLocationError(formatError);
+      return;
+    }
     setLocationError("");
     setSavingLocation(true);
     const supabase = createClient();
     const { data, error } = await supabase
       .from("saved_locations")
-      .insert({
-        owner_id: sale.owner_id,
-        label: locationLabel.trim(),
-        street,
-        city: saleForm.city.trim(),
-        state: saleForm.state.trim(),
-        zip: saleForm.zip.trim(),
-      })
+      .insert({ owner_id: sale.owner_id, label: locationLabel.trim(), ...address })
       .select()
       .single();
     setSavingLocation(false);
     if (error) {
-      setLocationError(error.message);
+      setLocationError(friendlyDbError(error.message));
       return;
     }
     if (data) {
@@ -392,7 +418,7 @@ export default function SaleAdmin({
       .select(ITEM_SELECT)
       .single();
     if (error) {
-      setAddError(error.message);
+      setAddError(friendlyDbError(error.message));
       return;
     }
     setItems((prev) => [data, ...prev]);
@@ -452,7 +478,7 @@ export default function SaleAdmin({
       .select(ITEM_SELECT)
       .single();
     if (error || !data) {
-      setEditError(error?.message || "Couldn't save — try again.");
+      setEditError(friendlyDbError(error?.message));
       return;
     }
     setItems((prev) => prev.map((i) => (i.id === id ? data : i)));
@@ -903,8 +929,25 @@ export default function SaleAdmin({
           />
         </Field>
         {saveError && <div className="text-marker text-sm font-semibold mb-2">{saveError}</div>}
+        {addressNotFound && (
+          <div className="text-sm bg-marker/10 border border-marker/30 rounded-lg px-3 py-2 mb-2">
+            <div className="font-semibold text-marker">{ADDRESS_NOT_FOUND}</div>
+            <div className="text-xs opacity-80 mt-1">
+              Brand-new streets are sometimes missing from the maps we check. If yours is correct, you can still save
+              it — buyers will see it on your sale page, but your sale won&apos;t appear in Find yard sales.
+            </div>
+            <button
+              type="button"
+              onClick={() => saveSaleSettings({ saveUnverified: true })}
+              disabled={savingSale}
+              className="mt-2 border-2 border-cardboard-dark bg-white font-bold px-3 py-1.5 rounded-lg text-xs"
+            >
+              It&apos;s correct — save anyway
+            </button>
+          </div>
+        )}
         <button
-          onClick={saveSaleSettings}
+          onClick={() => saveSaleSettings()}
           disabled={savingSale}
           className="bg-ink text-chalk font-bold px-4 py-2 rounded-lg text-sm disabled:opacity-60"
         >

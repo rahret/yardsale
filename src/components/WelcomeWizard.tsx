@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { HOUR_OPTIONS } from "@/lib/hours";
-import { randomSuffix, slugify } from "@/lib/utils";
+import { friendlyDbError, randomSuffix, slugify } from "@/lib/utils";
+import type { AddressFields } from "@/lib/address";
+import { ADDRESS_NOT_FOUND, checkAddress } from "@/lib/addressCheck";
 
 type Day = { date: string; start: string; end: string };
 
@@ -19,20 +21,49 @@ function nextSaturday(): string {
 
 /** Three quick steps that create a seller's first sale (as a draft), then
  * hand them to the sale page, where the Getting started checklist takes over. */
-export default function WelcomeWizard({ displayName }: { displayName: string }) {
+export default function WelcomeWizard({
+  displayName,
+  initialAddress,
+}: {
+  displayName: string;
+  /** The address saved on the seller's Account page, if any. */
+  initialAddress?: AddressFields | null;
+}) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [name, setName] = useState(displayName ? `${displayName}'s Yard Sale` : "");
   const [tagline, setTagline] = useState("");
-  const [address, setAddress] = useState({ street: "", city: "", state: "", zip: "" });
+  const [address, setAddress] = useState<AddressFields>(
+    initialAddress?.street ? initialAddress : { street: "", city: "", state: "", zip: "" }
+  );
+  // what the address check found: map coordinates, or that it couldn't be
+  // found (and the seller chose to keep it), or that it couldn't be checked
+  const [located, setLocated] = useState<{ lat: number | null; lng: number | null; listed?: boolean } | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [days, setDays] = useState<Day[]>([{ date: nextSaturday(), start: "08:00", end: "14:00" }]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  function next() {
+  async function next({ keepUnfound = false }: { keepUnfound?: boolean } = {}) {
     setError("");
+    setNotFound(false);
     if (step === 0 && !name.trim()) return setError("Give your sale a name.");
-    if (step === 1 && !address.street.trim()) return setError("Add a street address so buyers can find you.");
+    if (step === 1) {
+      setChecking(true);
+      const check = await checkAddress(address);
+      setChecking(false);
+      setAddress(check.address);
+      if (check.status === "invalid") return setError(check.error);
+      if (check.status === "not_found" && !keepUnfound) return setNotFound(true);
+      setLocated(
+        check.status === "verified"
+          ? { lat: check.lat, lng: check.lng }
+          : check.status === "not_found"
+            ? { lat: null, lng: null, listed: false }
+            : null
+      );
+    }
     setStep((s) => s + 1);
   }
 
@@ -59,23 +90,21 @@ export default function WelcomeWizard({ displayName }: { displayName: string }) 
         slug: `${slugify(name) || "sale"}-${randomSuffix(4)}`,
         name: name.trim().slice(0, 50),
         tagline: tagline.trim().slice(0, 75),
-        street: address.street.trim(),
-        city: address.city.trim(),
-        state: address.state.trim(),
-        zip: address.zip.trim(),
+        ...address,
+        ...(located || {}),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
       })
       .select()
       .single();
     if (saleError || !sale) {
       setSaving(false);
-      return setError(saleError?.message || "Couldn't create your sale — try again.");
+      return setError(friendlyDbError(saleError?.message));
     }
     await supabase
       .from("sale_days")
       .insert(valid.map((d) => ({ sale_id: sale.id, date: d.date, start_time: d.start, end_time: d.end })));
-    // place the address on the map (for buyer search) in the background
-    fetch(`/api/sales/${sale.id}/geocode`, { method: "POST" }).catch(() => {});
+    // the address check couldn't run: place it on the map in the background
+    if (!located) fetch(`/api/sales/${sale.id}/geocode`, { method: "POST" }).catch(() => {});
     router.push(`/dashboard/sales/${sale.id}?welcome=1`);
   }
 
@@ -125,7 +154,10 @@ export default function WelcomeWizard({ displayName }: { displayName: string }) 
             <input
               autoFocus
               value={address.street}
-              onChange={(e) => setAddress({ ...address, street: e.target.value })}
+              onChange={(e) => {
+                setAddress({ ...address, street: e.target.value });
+                setNotFound(false);
+              }}
               placeholder="123 Maple St"
               autoComplete="address-line1"
               className={INPUT}
@@ -133,21 +165,32 @@ export default function WelcomeWizard({ displayName }: { displayName: string }) 
             <div className="grid grid-cols-[1fr_70px_90px] gap-2 mt-2">
               <input
                 value={address.city}
-                onChange={(e) => setAddress({ ...address, city: e.target.value })}
+                onChange={(e) => {
+                  setAddress({ ...address, city: e.target.value });
+                  setNotFound(false);
+                }}
                 placeholder="City"
                 autoComplete="address-level2"
                 className={INPUT}
               />
               <input
                 value={address.state}
-                onChange={(e) => setAddress({ ...address, state: e.target.value })}
+                onChange={(e) => {
+                  setAddress({ ...address, state: e.target.value });
+                  setNotFound(false);
+                }}
+                maxLength={2}
                 placeholder="State"
                 autoComplete="address-level1"
                 className={INPUT}
               />
               <input
                 value={address.zip}
-                onChange={(e) => setAddress({ ...address, zip: e.target.value })}
+                onChange={(e) => {
+                  setAddress({ ...address, zip: e.target.value });
+                  setNotFound(false);
+                }}
+                maxLength={10}
                 placeholder="ZIP"
                 autoComplete="postal-code"
                 inputMode="numeric"
@@ -218,6 +261,22 @@ export default function WelcomeWizard({ displayName }: { displayName: string }) 
         )}
 
         {error && <div className="text-marker text-sm font-semibold mt-3">{error}</div>}
+        {notFound && step === 1 && (
+          <div className="text-sm bg-marker/10 border border-marker/30 rounded-lg px-3 py-2 mt-3">
+            <div className="font-semibold text-marker">{ADDRESS_NOT_FOUND}</div>
+            <div className="text-xs opacity-80 mt-1">
+              Brand-new streets are sometimes missing from the maps we check. If yours is correct, you can keep it —
+              buyers will see it on your sale page, but your sale won&apos;t appear in Find yard sales.
+            </div>
+            <button
+              type="button"
+              onClick={() => next({ keepUnfound: true })}
+              className="mt-2 border-2 border-cardboard-dark bg-white font-bold px-3 py-1.5 rounded-lg text-xs"
+            >
+              It&apos;s correct — continue
+            </button>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 mt-5">
           {step > 0 && (
@@ -226,8 +285,13 @@ export default function WelcomeWizard({ displayName }: { displayName: string }) 
             </button>
           )}
           {step < STEPS.length - 1 ? (
-            <button type="button" onClick={next} className="bg-grass text-white font-bold px-5 py-2.5 rounded-lg shadow-tag">
-              Next
+            <button
+              type="button"
+              onClick={() => next()}
+              disabled={checking}
+              className="bg-grass text-white font-bold px-5 py-2.5 rounded-lg shadow-tag disabled:opacity-60"
+            >
+              {checking ? "Checking address…" : "Next"}
             </button>
           ) : (
             <button
