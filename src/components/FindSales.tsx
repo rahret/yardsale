@@ -29,31 +29,55 @@ const DATE_FILTERS: { key: DateFilter; label: string }[] = [
 
 type Place = { lat: number; lng: number; label: string };
 
+// remembers the buyer's last place on this device, so a return visit shows
+// nearby sales straight away
+const PLACE_KEY = "find:place";
+function savedPlace(): Place | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(PLACE_KEY) || "null");
+    return p && Number.isFinite(p.lat) && Number.isFinite(p.lng) && typeof p.label === "string" ? p : null;
+  } catch {
+    return null;
+  }
+}
+function rememberPlace(p: Place | null) {
+  try {
+    if (p) localStorage.setItem(PLACE_KEY, JSON.stringify(p));
+    else localStorage.removeItem(PLACE_KEY);
+  } catch {
+    // private browsing etc. — just don't remember
+  }
+}
+
 function localToday(now: Date): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-/** Buyer search: upcoming listed sales near a place, by date and category,
- * as a list or a map, a page at a time. */
-export default function FindSales({ initialListings, initialTotal }: { initialListings: Listing[]; initialTotal: number }) {
+/** Buyer search: upcoming listed sales near a place (typed, or the buyer's
+ * location), by date and category, as a list or a map, a page at a time.
+ * Nothing is shown until a place is chosen. */
+export default function FindSales() {
   const [placeText, setPlaceText] = useState("");
   const [place, setPlace] = useState<Place | null>(null);
-  const [textQuery, setTextQuery] = useState(""); // used when a place can't be found on the map
   const [radius, setRadius] = useState<number>(25);
   const [dateFilter, setDateFilter] = useState<DateFilter>("any");
   const [category, setCategory] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "map">("list");
 
-  const [listings, setListings] = useState<Listing[]>(initialListings);
-  const [total, setTotal] = useState(initialTotal);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState<Date | null>(null); // the buyer's clock, browser only
-  const firstRun = useRef(true);
   const request = useRef(0);
 
   useEffect(() => {
+    const p = savedPlace();
+    if (p) {
+      setPlace(p);
+      if (p.label !== "your location") setPlaceText(p.label);
+    }
     setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
@@ -65,22 +89,20 @@ export default function FindSales({ initialListings, initialTotal }: { initialLi
   }, [listings, category]);
 
   async function load(offset: number) {
+    if (!place) return;
     const id = ++request.current;
     setLoading(true);
     const params = new URLSearchParams({ offset: String(offset) });
-    if (place) {
-      params.set("lat", String(place.lat));
-      params.set("lng", String(place.lng));
-      params.set("radius", String(radius));
-    } else if (textQuery) {
-      params.set("q", textQuery);
-    }
+    params.set("lat", String(place.lat));
+    params.set("lng", String(place.lng));
+    params.set("radius", String(radius));
     const range = dateRange(dateFilter, localToday(new Date()));
     params.set("from", range ? range[0] : localToday(new Date()));
     if (range) params.set("to", range[1]);
     if (category) params.set("category", category);
     try {
       const res = await fetch(`/api/sales/search?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { listings: Listing[]; total: number };
       if (id !== request.current) return; // a newer search started
       setListings((prev) => (offset === 0 ? data.listings : [...prev, ...data.listings]));
@@ -91,23 +113,25 @@ export default function FindSales({ initialListings, initialTotal }: { initialLi
     if (id === request.current) setLoading(false);
   }
 
-  // re-search whenever the filters change (the server already rendered the first page)
+  // search whenever the place or filters change; no place, no results
   useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
+    if (!place) {
+      request.current++;
+      setListings([]);
+      setTotal(0);
+      setLoading(false);
       return;
     }
     load(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [place, textQuery, radius, dateFilter, category]);
+  }, [place, radius, dateFilter, category]);
 
   async function searchPlace(e: React.FormEvent) {
     e.preventDefault();
     const q = placeText.trim();
     setNotice("");
     if (!q) {
-      setPlace(null);
-      setTextQuery("");
+      setNotice("Type a ZIP code, city or address — or use your location.");
       return;
     }
     setLocating(true);
@@ -115,17 +139,12 @@ export default function FindSales({ initialListings, initialTotal }: { initialLi
       const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
       if (res.ok) {
         const c = await res.json();
-        setTextQuery("");
-        setPlace({ lat: c.lat, lng: c.lng, label: q });
+        choosePlace({ lat: c.lat, lng: c.lng, label: q });
       } else {
-        // can't put it on a map — fall back to matching the words
-        setPlace(null);
-        setTextQuery(q);
-        setNotice(`Couldn't find “${q}” on the map, so showing sales that mention it.`);
+        setNotice(`Couldn't find “${q}” — try a ZIP code, or a city and state like “Ankeny, IA”.`);
       }
     } catch {
-      setPlace(null);
-      setTextQuery(q);
+      setNotice("Couldn't look that up — check your connection and try again.");
     }
     setLocating(false);
   }
@@ -141,8 +160,7 @@ export default function FindSales({ initialListings, initialTotal }: { initialLi
       (pos) => {
         setLocating(false);
         setPlaceText("");
-        setTextQuery("");
-        setPlace({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: "your location" });
+        choosePlace({ lat: pos.coords.latitude, lng: pos.coords.longitude, label: "your location" });
       },
       () => {
         setLocating(false);
@@ -152,10 +170,15 @@ export default function FindSales({ initialListings, initialTotal }: { initialLi
     );
   }
 
+  function choosePlace(p: Place) {
+    setPlace(p);
+    rememberPlace(p);
+  }
+
   function clearPlace() {
     setPlaceText("");
     setPlace(null);
-    setTextQuery("");
+    rememberPlace(null);
     setNotice("");
   }
 
@@ -164,11 +187,7 @@ export default function FindSales({ initialListings, initialTotal }: { initialLi
       active ? "bg-ink text-chalk border-ink" : "bg-white border-cardboard-dark/60"
     }`;
 
-  const heading = place
-    ? `${total} ${total === 1 ? "sale" : "sales"} within ${radius} miles of ${place.label}`
-    : textQuery
-      ? `${total} ${total === 1 ? "sale" : "sales"} matching “${textQuery}”`
-      : `${total} ${total === 1 ? "sale" : "sales"} coming up`;
+  const heading = place ? `${total} ${total === 1 ? "sale" : "sales"} within ${radius} miles of ${place.label}` : "";
 
   return (
     <section>
@@ -182,14 +201,14 @@ export default function FindSales({ initialListings, initialTotal }: { initialLi
       <div className="bg-white border-2 border-cardboard-dark rounded-2xl p-4 shadow-tag">
         <form onSubmit={searchPlace} className="flex gap-2">
           <label className="sr-only" htmlFor="place-search">
-            ZIP code or city
+            ZIP code, city or address
           </label>
           <input
             id="place-search"
             type="search"
             value={placeText}
             onChange={(e) => setPlaceText(e.target.value)}
-            placeholder="ZIP code or city"
+            placeholder="ZIP, city or address"
             className="flex-1 min-w-0 px-4 py-3 border-2 border-cardboard-dark rounded-xl text-base"
           />
           <button type="submit" disabled={locating} className="bg-ink text-chalk font-bold px-4 rounded-xl text-sm disabled:opacity-60">
@@ -246,51 +265,63 @@ export default function FindSales({ initialListings, initialTotal }: { initialLi
         {notice && <div className="text-xs font-semibold text-amber mt-2">{notice}</div>}
       </div>
 
-      <div className="flex items-center justify-between gap-3 mt-6 mb-3">
-        <h2 className="font-bold" aria-live="polite">
-          {loading && listings.length === 0 ? "Searching…" : heading}
-        </h2>
-        <div className="flex rounded-full border-2 border-cardboard-dark overflow-hidden text-xs font-bold shrink-0">
-          {(["list", "map"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              aria-pressed={view === v}
-              className={`px-3 py-1.5 ${view === v ? "bg-ink text-chalk" : "bg-white"}`}
-            >
-              {v === "list" ? "☰ List" : "🗺️ Map"}
-            </button>
-          ))}
+      {!place ? (
+        <div className="border-2 border-dashed border-cardboard-dark rounded-xl p-8 text-center mt-6">
+          <div className="text-4xl mb-1">📍</div>
+          <span className="font-marker text-2xl text-marker block mb-1">Where are you shopping?</span>
+          <p className="text-sm opacity-75 max-w-sm mx-auto">
+            Enter a ZIP code, city or address, or tap <strong>Use my location</strong>, to see yard sales in your area.
+          </p>
         </div>
-      </div>
-
-      {listings.length === 0 && !loading ? (
-        <div className="border-2 border-dashed border-cardboard-dark rounded-xl p-8 text-center opacity-80">
-          <span className="font-marker text-xl text-marker block mb-2">no sales found</span>
-          {place ? "Try a bigger distance, another day, or a nearby town." : "Try a nearby ZIP or city, or a different day."}
-        </div>
-      ) : view === "map" ? (
-        <SalesMap listings={listings} center={place} />
       ) : (
-        <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${loading ? "opacity-60" : ""}`}>
-          {listings.map((l) => (
-            <SaleCard key={l.slug} listing={l} now={now} />
-          ))}
-        </div>
-      )}
+        <>
+          <div className="flex items-center justify-between gap-3 mt-6 mb-3">
+            <h2 className="font-bold" aria-live="polite">
+              {loading && listings.length === 0 ? "Searching…" : heading}
+            </h2>
+            <div className="flex rounded-full border-2 border-cardboard-dark overflow-hidden text-xs font-bold shrink-0">
+              {(["list", "map"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  aria-pressed={view === v}
+                  className={`px-3 py-1.5 ${view === v ? "bg-ink text-chalk" : "bg-white"}`}
+                >
+                  {v === "list" ? "☰ List" : "🗺️ Map"}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {listings.length < total && (
-        <div className="text-center mt-6">
-          <button
-            type="button"
-            onClick={() => load(listings.length)}
-            disabled={loading}
-            className="border-2 border-cardboard-dark bg-white font-bold px-6 py-2.5 rounded-lg disabled:opacity-60"
-          >
-            {loading ? "Loading…" : `Show more (${total - listings.length} more)`}
-          </button>
-        </div>
+          {listings.length === 0 && !loading ? (
+            <div className="border-2 border-dashed border-cardboard-dark rounded-xl p-8 text-center opacity-80">
+              <span className="font-marker text-xl text-marker block mb-2">no sales found</span>
+              Try a bigger distance, another day, or a nearby town.
+            </div>
+          ) : view === "map" ? (
+            <SalesMap listings={listings} center={place} />
+          ) : (
+            <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${loading ? "opacity-60" : ""}`}>
+              {listings.map((l) => (
+                <SaleCard key={l.slug} listing={l} now={now} />
+              ))}
+            </div>
+          )}
+
+          {listings.length < total && (
+            <div className="text-center mt-6">
+              <button
+                type="button"
+                onClick={() => load(listings.length)}
+                disabled={loading}
+                className="border-2 border-cardboard-dark bg-white font-bold px-6 py-2.5 rounded-lg disabled:opacity-60"
+              >
+                {loading ? "Loading…" : `Show more (${total - listings.length} more)`}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

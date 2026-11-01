@@ -52,6 +52,9 @@ src/components/PhotoUploader.tsx  Drag-and-drop multi-photo upload to Supabase S
 ## Find yard sales (buyer search)
 
 `/find` lists live sales whose sellers ticked **List my sale** (existing sales start unlisted).
+Nothing is shown until the buyer enters a ZIP code, city or address or taps **Use my
+location**; `/api/sales/search` refuses searches without a location. The last place is
+remembered on that device.
 
 - **Search** runs in the database (`search_sales()`): place/radius, dates, words (name,
   street name — never the house number — city, state, ZIP prefix) and category, 24 at a time
@@ -61,7 +64,7 @@ src/components/PhotoUploader.tsx  Drag-and-drop multi-photo upload to Supabase S
   opens their sale). Lookups use the free **US Census Bureau geocoder**, falling back to
   **OpenStreetMap Nominatim**. Buyers can type a ZIP or city (`/api/geocode`, Nominatim,
   cached and spaced 1 s apart per its usage policy) or tap **Use my location**, then pick
-  5 / 10 / 25 / 50 miles. A place that can't be found falls back to word matching.
+  5 / 10 / 25 / 50 miles. A place that can't be found asks the buyer to try another.
 - **Map view:** Leaflet with OpenStreetMap tiles (no API key; attribution shown). Pins for
   sales that hide the house number are rounded to about a block (~200 m).
 - No keys or accounts are needed for any of this. For heavy traffic, OpenStreetMap's free tile
