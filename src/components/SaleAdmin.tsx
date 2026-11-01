@@ -6,9 +6,8 @@ import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
 import { PAYMENT_METHODS, type Item, type Order, type SellMode, type Sale, type SaleDay, type SaleStatus, type SavedLocation } from "@/lib/types";
 import { PAYMENT_LABELS, paymentMethodsFromProfile } from "@/lib/saleInfo";
-import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, formatSignSaleDay, isBulkItem, money, siteOrigin, sortSaleDays, friendlyDbError } from "@/lib/utils";
+import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, isBulkItem, money, siteOrigin, sortSaleDays, friendlyDbError } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
-import FitText from "@/components/FitText";
 import ShareSaleCard from "@/components/ShareSaleCard";
 import BuyNowCard from "@/components/BuyNowCard";
 import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
@@ -113,7 +112,7 @@ export default function SaleAdmin({
   const [savingLocation, setSavingLocation] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [dayRows, setDayRows] = useState<DayRow[]>(toDayRows(initialSaleDays));
-  const [printJob, setPrintJob] = useState<"qr" | "sign" | null>(null);
+  const [printJob, setPrintJob] = useState<"qr" | null>(null);
   const [printRoot, setPrintRoot] = useState<HTMLElement | null>(null);
 
   const siteUrl = siteOrigin(typeof window !== "undefined" ? window.location.origin : "");
@@ -165,7 +164,7 @@ export default function SaleAdmin({
       action: "Add photo",
     },
     { key: "live", label: "Set your sale to Live", done: sale.status === "live", href: "#status", action: "Go live" },
-    { key: "print", label: "Print your QR sign", done: !!checklistFlags.printed, href: "#share", action: "Print sign" },
+    { key: "print", label: "Print your QR sign", done: !!checklistFlags.printed, href: `/dashboard/sales/${sale.id}/sign`, action: "Make sign" },
     { key: "share", label: "Share your link", done: !!checklistFlags.shared, href: "#share", action: "Share" },
   ];
   const showChecklist = !checklistFlags.hidden && checklist.some((s) => !s.done);
@@ -719,13 +718,12 @@ export default function SaleAdmin({
           >
             🖨️ Print QR code
           </button>
-          <button
-            type="button"
-            onClick={() => setPrintJob("sign")}
+          <a
+            href={`/dashboard/sales/${sale.id}/sign`}
             className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm shadow-tag"
           >
-            🪧 Create sign
-          </button>
+            🪧 Sign builder
+          </a>
         </div>
         <ShareSaleCard
           sale={sale}
@@ -1313,31 +1311,6 @@ export default function SaleAdmin({
               fgColor="#000000"
               style={{ width: "min(90vw, 90vh)", height: "min(90vw, 90vh)" }}
             />
-          </div>,
-          printRoot
-        )}
-
-      {printRoot &&
-        printJob === "sign" &&
-        createPortal(
-          <div className="hidden print:flex flex-col w-full h-full p-4 gap-[2vw]">
-            {/* Title, address, and dates/times each render at the largest size
-                that fits their width on one line (see FitText). The QR code and
-                the details column each take ~half the width, with a small gap. */}
-            <FitText lines={["YARD SALE"]} fontWeight={800} />
-            <div className="flex flex-1 w-full items-center gap-[4%] min-h-0">
-              <div className="w-[48%] h-full flex items-center justify-center min-h-0">
-                <QRCodeSVG value={qrUrl} fgColor="#000000" style={{ width: "100%", height: "100%" }} />
-              </div>
-              <div className="w-[48%] flex flex-col items-center justify-center gap-[3vw]">
-                {sale.street && <FitText lines={[sale.street]} />}
-                {sortedDayRows.length > 0 ? (
-                  <FitText lines={sortedDayRows.map(formatSignSaleDay)} />
-                ) : (
-                  <FitText lines={["Dates & times coming soon"]} className="opacity-60" />
-                )}
-              </div>
-            </div>
           </div>,
           printRoot
         )}
