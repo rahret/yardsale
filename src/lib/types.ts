@@ -112,6 +112,11 @@ export interface Profile {
   id: string;
   display_name: string | null;
   phone: string;
+  /** The seller's own address (private); pre-fills new sales. */
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
   payment_options: PaymentOptions;
   created_at: string;
 }

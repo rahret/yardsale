@@ -25,9 +25,10 @@ export default async function WelcomePage({ searchParams }: { searchParams: { bi
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const [{ data: billing }, { data: sales }] = await Promise.all([
+  const [{ data: billing }, { data: sales }, { data: profile }] = await Promise.all([
     supabase.from("account_billing").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("sales").select("id").eq("owner_id", user.id).limit(1),
+    supabase.from("profiles").select("street, city, state, zip").eq("id", user.id).maybeSingle(),
   ]);
   const access = accessFor(billing);
 
@@ -56,5 +57,5 @@ export default async function WelcomePage({ searchParams }: { searchParams: { bi
     );
   }
 
-  return <WelcomeWizard displayName={user.user_metadata?.display_name || ""} />;
+  return <WelcomeWizard displayName={user.user_metadata?.display_name || ""} initialAddress={profile} />;
 }

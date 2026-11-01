@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Sale } from "@/lib/types";
-import { randomSuffix, slugify } from "@/lib/utils";
+import { friendlyDbError, randomSuffix, slugify } from "@/lib/utils";
+import type { AddressFields } from "@/lib/address";
 import { type Access, TRIAL_LIMITS, UPGRADE_HREF } from "@/lib/billing";
 import { LockedBadge, UpgradeNote } from "@/components/PlanOptions";
 
@@ -18,10 +19,13 @@ export default function DashboardHome({
   initialSales,
   displayName,
   access,
+  profileAddress,
 }: {
   initialSales: Sale[];
   displayName?: string;
   access: Access;
+  /** The address on the seller's Account page: new sales start with it. */
+  profileAddress?: AddressFields | null;
 }) {
   const router = useRouter();
   const [sales, setSales] = useState<Sale[]>(initialSales);
@@ -45,15 +49,17 @@ export default function DashboardHome({
     const slug = `${slugify(name) || "sale"}-${randomSuffix(4)}`;
     const { data, error } = await supabase
       .from("sales")
-      .insert({ owner_id: user.id, slug, name: name.trim() })
+      .insert({ owner_id: user.id, slug, name: name.trim(), ...(profileAddress?.street ? profileAddress : {}) })
       .select()
       .single();
 
     setLoading(false);
     if (error) {
-      setError(error.message);
+      setError(friendlyDbError(error.message));
       return;
     }
+    // place the Account-page address on the map; the sale page re-checks it on save
+    if (profileAddress?.street) fetch(`/api/sales/${data.id}/geocode`, { method: "POST" }).catch(() => {});
     router.push(`/dashboard/sales/${data.id}`);
   }
 

@@ -3,7 +3,7 @@
 
 insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000f1', 'search-seller@example.com');
 -- Ankeny (~0 mi from the search point), Des Moines (~12 mi), Iowa City (~110 mi),
--- one with no coordinates yet, one unlisted, one draft
+-- one whose address wasn't found (no coordinates), one unlisted, one draft
 -- sellers on Pro (holds and directory listings need a full plan)
 insert into public.account_billing (user_id, plan, subscription_status) values ('00000000-0000-0000-0000-0000000000f1', 'pro', 'active');
 insert into public.sales (id, owner_id, slug, name, street, city, state, zip, status, listed, lat, lng) values
@@ -27,10 +27,11 @@ do $$
 declare
   slugs text;
 begin
-  -- no location: soonest first, unlisted and draft sales never appear
+  -- no location: soonest first; unlisted, draft, and not-found addresses never appear
   select string_agg(s.slug, ',' order by r.ord) into slugs
   from (select sale_id, row_number() over () ord from public.search_sales()) r join public.sales s on s.id = r.sale_id;
-  assert slugs = 'ankeny,iowa-city,no-coords,dsm', 'soonest first, listed only: ' || slugs;
+  assert slugs = 'ankeny,iowa-city,dsm', 'soonest first, listed only: ' || slugs;
+  assert not exists (select 1 from public.search_sales(p_query => 'toys')), 'an address that was never found is not listed';
 
   -- within 25 miles of Ankeny: nearest first; no-coordinate sales can't match a radius
   select string_agg(s.slug, ',' order by r.ord) into slugs
@@ -40,16 +41,16 @@ begin
     'Des Moines is about 10 miles from Ankeny';
 
   -- a location with no radius still sorts by distance and keeps everything
-  assert (select count(*) from public.search_sales(41.73, -93.60, null)) = 4, 'no radius keeps all';
+  assert (select count(*) from public.search_sales(41.73, -93.60, null)) = 3, 'no radius keeps all';
 
   -- dates: only sales with a day in range
-  assert (select count(*) from public.search_sales(p_from => current_date, p_to => current_date + 3)) = 3, 'next 3 days';
+  assert (select count(*) from public.search_sales(p_from => current_date, p_to => current_date + 3)) = 2, 'next 3 days';
   assert (select count(*) from public.search_sales(p_from => current_date + 6, p_to => current_date + 8)) = 1, 'next week';
 
   -- words: city, ZIP prefix, sale name; every word must match; never the house number
-  assert (select count(*) from public.search_sales(p_query => 'ankeny')) = 2, 'city';
-  assert (select count(*) from public.search_sales(p_query => '500')) = 2, 'ZIP prefix';
-  assert (select count(*) from public.search_sales(p_query => 'Ankeny, IA')) = 2, 'commas ignored';
+  assert (select count(*) from public.search_sales(p_query => 'ankeny')) = 1, 'city';
+  assert (select count(*) from public.search_sales(p_query => '5002')) = 1, 'ZIP prefix';
+  assert (select count(*) from public.search_sales(p_query => 'Ankeny, IA')) = 1, 'commas ignored';
   assert (select count(*) from public.search_sales(p_query => 'ankeny estate')) = 0, 'all words must match';
   assert (select count(*) from public.search_sales(p_query => '5009')) = 0, 'house number is not searchable';
   assert (select count(*) from public.search_sales(p_query => 'nw 4th')) = 1, 'street name is';
@@ -58,9 +59,9 @@ begin
   assert (select count(*) from public.search_sales(p_category => 'FURNITURE')) = 2, 'category';
 
   -- paging: total counts every match; pages don't overlap
-  assert (select max(total) from public.search_sales(p_limit => 2)) = 4, 'total across pages';
+  assert (select max(total) from public.search_sales(p_limit => 2)) = 3, 'total across pages';
   assert (select count(*) from public.search_sales(p_limit => 2)) = 2, 'page size';
-  assert (select count(*) from public.search_sales(p_limit => 2, p_offset => 2)) = 2, 'second page';
+  assert (select count(*) from public.search_sales(p_limit => 2, p_offset => 2)) = 1, 'second page';
   assert not exists (
     select 1 from public.search_sales(p_limit => 2) a join public.search_sales(p_limit => 2, p_offset => 2) b using (sale_id)
   ), 'pages do not overlap';

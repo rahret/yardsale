@@ -37,7 +37,7 @@ supabase/schema.sql          All tables, RLS policies, and the reserve_item /
                               sweep_expired_reservations database functions.
 src/lib/supabase/client.ts   Browser Supabase client (client components).
 src/lib/supabase/server.ts   Server Supabase client (server components / route handlers).
-middleware.ts                Keeps auth session fresh, protects /dashboard routes.
+src/middleware.ts            Keeps auth session fresh, protects /dashboard routes.
 src/app/login, /signup       Auth pages.
 src/app/dashboard            Signed-in area: list of a user's sales, create new sale.
 src/app/dashboard/account    Account page: profile, email/password, plan & billing,
@@ -67,6 +67,21 @@ src/components/PhotoUploader.tsx  Drag-and-drop multi-photo upload to Supabase S
 - No keys or accounts are needed for any of this. For heavy traffic, OpenStreetMap's free tile
   and Nominatim services ask you to move to a paid provider (e.g. MapTiler, Stadia Maps) —
   swap the tile URL in `SalesMap.tsx` and the lookup in `src/lib/geocode.ts`.
+
+## Addresses
+
+Sale addresses (and the optional address on the Account page, which pre-fills new sales) are
+checked before they're saved:
+
+- **Format** (instantly, `src/lib/address.ts`): a house number and street name, a city, a
+  two-letter US state code and a 5-digit ZIP.
+- **Exists** (`/api/address/verify`): a street-level match from the US Census geocoder, or
+  OpenStreetMap as a fallback, in the state that was entered. Matching only the town or ZIP
+  doesn't count.
+- If the address isn't found, the seller can still save it on purpose (brand-new streets are
+  sometimes missing from the maps), but the sale stays out of Find yard sales, which only lists
+  sales whose address was found. If the lookup services are down, the address is saved and
+  checked again in the background.
 
 ## Sharing & link previews
 

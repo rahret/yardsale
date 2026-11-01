@@ -161,3 +161,14 @@ export const EMOJI_PRESETS = [
   "📦", "🪑", "🛋️", "📚", "🎮", "🧸", "🖼️", "🕹️", "👕", "🍽️",
   "🔧", "🚲", "💡", "🎸", "🧦", "🎧", "🖥️", "⛺", "🧴", "🏓",
 ];
+
+/** A database error as a seller should see it. Errors that only happen when
+ * the login has lapsed (writes arriving as a signed-out visitor) become a
+ * clear "log in again" instead of Postgres wording. */
+export function friendlyDbError(message: string | undefined | null): string {
+  const m = message || "";
+  if (/permission denied|JWT expired|Cannot coerce the result to a single JSON object|row-level security/i.test(m)) {
+    return "Your login has expired — refresh the page (or log in again) and try once more.";
+  }
+  return m || "Something went wrong — please try again.";
+}

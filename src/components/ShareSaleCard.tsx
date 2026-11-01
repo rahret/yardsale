@@ -196,8 +196,8 @@ export default function ShareSaleCard({
           </span>
           {sale.listed && sale.street?.trim() && sale.lat == null && (
             <span className="block text-xs font-semibold text-amber mt-0.5">
-              We couldn&apos;t place your address on the map yet, so distance searches won&apos;t find it. Check the
-              address in Sale details and save again.
+              We couldn&apos;t find your address on the map, so your sale won&apos;t appear in Find yard sales.
+              Check the address in Sale details and save again.
             </span>
           )}
         </span>

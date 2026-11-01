@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AccountBilling, PaymentOptions, Profile } from "@/lib/types";
-import { passwordError, siteOrigin } from "@/lib/utils";
+import { friendlyDbError, passwordError, siteOrigin } from "@/lib/utils";
+import { type AddressFields, normalizeAddress } from "@/lib/address";
+import { ADDRESS_NOT_FOUND, checkAddress, sameAddress } from "@/lib/addressCheck";
 import PasswordRules from "@/components/PasswordRules";
 import PlanOptions from "@/components/PlanOptions";
 import UpgradeDialog from "@/components/UpgradeDialog";
@@ -77,10 +79,38 @@ function ProfileSection({
 }) {
   const [displayName, setDisplayName] = useState(initialProfile?.display_name || fallbackDisplayName);
   const [phone, setPhone] = useState(initialProfile?.phone || "");
+  const [address, setAddress] = useState<AddressFields>({
+    street: initialProfile?.street || "",
+    city: initialProfile?.city || "",
+    state: initialProfile?.state || "",
+    zip: initialProfile?.zip || "",
+  });
+  const [addressNotFound, setAddressNotFound] = useState(false);
   const [status, setStatus] = useState<Status>(null);
 
-  async function save() {
+  const editAddress = (patch: Partial<AddressFields>) => {
+    setAddress({ ...address, ...patch });
+    setAddressNotFound(false);
+  };
+
+  async function save({ keepUnfound = false }: { keepUnfound?: boolean } = {}) {
     setStatus({ busy: true });
+    setAddressNotFound(false);
+
+    // the address is optional, but if given (and changed) it must check out
+    let cleanAddress = normalizeAddress(address);
+    const blank = !cleanAddress.street && !cleanAddress.city && !cleanAddress.state && !cleanAddress.zip;
+    if (!blank && !sameAddress(cleanAddress, initialProfile || {})) {
+      const check = await checkAddress(cleanAddress);
+      cleanAddress = check.address;
+      if (check.status === "invalid") return setStatus({ error: check.error });
+      if (check.status === "not_found" && !keepUnfound) {
+        setStatus(null);
+        return setAddressNotFound(true);
+      }
+    }
+    setAddress(cleanAddress);
+
     const supabase = createClient();
     const {
       data: { user },
@@ -90,9 +120,9 @@ function ProfileSection({
     const name = displayName.trim().slice(0, 50);
     const { error } = await supabase
       .from("profiles")
-      .update({ display_name: name, phone: phone.trim() })
+      .update({ display_name: name, phone: phone.trim(), ...cleanAddress })
       .eq("id", user.id);
-    if (error) return setStatus({ error: error.message });
+    if (error) return setStatus({ error: friendlyDbError(error.message) });
     // The dashboard greeting reads the name from auth metadata, so keep it in sync.
     const { error: metaError } = await supabase.auth.updateUser({ data: { display_name: name } });
     setStatus(metaError ? { error: metaError.message } : { ok: "Profile saved." });
@@ -119,7 +149,62 @@ function ProfileSection({
           placeholder="(555) 555-1234"
         />
       </Field>
-      <SaveRow label="Save profile" status={status} onClick={save} />
+      <Field label="Your address (optional, private)">
+        <input
+          type="text"
+          value={address.street}
+          onChange={(e) => editAddress({ street: e.target.value })}
+          className={INPUT}
+          placeholder="123 Maple St"
+          autoComplete="address-line1"
+        />
+        <div className="grid grid-cols-[1fr_64px_90px] gap-2 mt-2">
+          <input
+            type="text"
+            value={address.city}
+            onChange={(e) => editAddress({ city: e.target.value })}
+            className={INPUT}
+            placeholder="City"
+            autoComplete="address-level2"
+            aria-label="City"
+          />
+          <input
+            type="text"
+            value={address.state}
+            maxLength={2}
+            onChange={(e) => editAddress({ state: e.target.value })}
+            className={INPUT}
+            placeholder="ST"
+            autoComplete="address-level1"
+            aria-label="State"
+          />
+          <input
+            type="text"
+            value={address.zip}
+            maxLength={10}
+            inputMode="numeric"
+            onChange={(e) => editAddress({ zip: e.target.value })}
+            className={INPUT}
+            placeholder="ZIP"
+            autoComplete="postal-code"
+            aria-label="ZIP"
+          />
+        </div>
+        <p className="text-[11px] opacity-60 mt-1">Only you see this. It fills in the address when you set up a new sale.</p>
+      </Field>
+      {addressNotFound && (
+        <div className="text-sm bg-marker/10 border border-marker/30 rounded-lg px-3 py-2 mb-2.5">
+          <div className="font-semibold text-marker">{ADDRESS_NOT_FOUND}</div>
+          <button
+            type="button"
+            onClick={() => save({ keepUnfound: true })}
+            className="mt-2 border-2 border-cardboard-dark bg-white font-bold px-3 py-1.5 rounded-lg text-xs"
+          >
+            It&apos;s correct — save anyway
+          </button>
+        </div>
+      )}
+      <SaveRow label="Save profile" status={status} onClick={() => save()} />
     </Card>
   );
 }
