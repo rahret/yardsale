@@ -15,6 +15,9 @@ function fakeAdmin(rpcResult: string) {
           return chain;
         },
         eq: () => chain,
+        is: () => chain,
+        select: () => chain,
+        maybeSingle: async () => ({ data: null, error: null }),
         then: (resolve: (v: unknown) => void) => resolve({ data: null, error: null }),
       };
       return chain;
@@ -48,7 +51,7 @@ const completed = (over: Partial<Stripe.Checkout.Session> = {}) =>
 
 describe("handleStripeEvent", () => {
   it("completes a paid checkout with the pickup name and email", async () => {
-    const { admin, rpc } = fakeAdmin("paid");
+    const { admin, rpc, updates } = fakeAdmin("paid");
     const { stripe, refundsCreate } = fakeStripe();
     expect(await handleStripeEvent(completed(), stripe, admin as never)).toBe("paid");
     expect(rpc).toHaveBeenCalledWith("complete_order", {
@@ -58,6 +61,8 @@ describe("handleStripeEvent", () => {
       p_buyer_name: "Sam",
     });
     expect(refundsCreate).not.toHaveBeenCalled();
+    // and claims the seller's email alert for this order
+    expect(updates.some((u) => u.table === "orders" && "seller_notified_at" in u.values)).toBe(true);
   });
 
   it("refunds automatically when someone else got the item first", async () => {

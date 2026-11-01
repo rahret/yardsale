@@ -86,6 +86,7 @@ function ProfileSection({
     zip: initialProfile?.zip || "",
   });
   const [addressNotFound, setAddressNotFound] = useState(false);
+  const [emailAlerts, setEmailAlerts] = useState(initialProfile?.email_alerts ?? true);
   const [status, setStatus] = useState<Status>(null);
 
   const editAddress = (patch: Partial<AddressFields>) => {
@@ -120,7 +121,7 @@ function ProfileSection({
     const name = displayName.trim().slice(0, 50);
     const { error } = await supabase
       .from("profiles")
-      .update({ display_name: name, phone: phone.trim(), ...cleanAddress })
+      .update({ display_name: name, phone: phone.trim(), ...cleanAddress, email_alerts: emailAlerts })
       .eq("id", user.id);
     if (error) return setStatus({ error: friendlyDbError(error.message) });
     // The dashboard greeting reads the name from auth metadata, so keep it in sync.
@@ -204,6 +205,13 @@ function ProfileSection({
           </button>
         </div>
       )}
+      <label className="flex items-start gap-2 text-sm mb-3">
+        <input type="checkbox" className="mt-1" checked={emailAlerts} onChange={(e) => setEmailAlerts(e.target.checked)} />
+        <span>
+          Email me when someone buys or holds one of my items
+          <span className="block text-xs opacity-60">Sent to your login email, so you can set the item aside.</span>
+        </span>
+      </label>
       <SaveRow label="Save profile" status={status} onClick={() => save()} />
     </Card>
   );

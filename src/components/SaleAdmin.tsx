@@ -544,8 +544,11 @@ export default function SaleAdmin({
 
   async function deleteItem(id: string) {
     const supabase = createClient();
+    const paths = (items.find((i) => i.id === id)?.item_photos || []).map((p) => p.storage_path);
     const { error } = await supabase.from("items").delete().eq("id", id);
     if (!error) {
+      // the database rows go with the item; the photo files have to be removed too
+      if (paths.length) supabase.storage.from("item-photos").remove(paths).then(() => {});
       setItems((prev) => prev.filter((i) => i.id !== id));
       setConfirmDeleteId(null);
     }
@@ -669,7 +672,7 @@ export default function SaleAdmin({
       </Card>
 
       {/* online payments */}
-      <Card title="💳 Buy Now (online payments)">
+      <Card title="💳 Buy Now (online payments)" id="orders">
         {!premium && (
           <div className="mb-3">
             <UpgradeNote>

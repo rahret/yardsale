@@ -53,6 +53,8 @@ alter table public.profiles add column if not exists street text not null defaul
 alter table public.profiles add column if not exists city text not null default '';
 alter table public.profiles add column if not exists state text not null default '';
 alter table public.profiles add column if not exists zip text not null default '';
+-- email the seller when someone buys or holds one of their items
+alter table public.profiles add column if not exists email_alerts boolean not null default true;
 -- how buyers can pay this seller today (before card payments are set up), e.g.
 -- {"cash": true, "venmo": "@jamie", "cashapp": "$jamie", "paypal": "", "zelle": ""}
 alter table public.profiles add column if not exists payment_options jsonb not null default '{"cash": true}';
@@ -585,6 +587,8 @@ create table if not exists public.item_holds (
   phone text not null,
   created_at timestamptz not null default now()
 );
+-- when the seller was emailed about this hold (claimed once, so never twice)
+alter table public.item_holds add column if not exists seller_notified_at timestamptz;
 
 create index if not exists item_holds_sale_id_idx on public.item_holds (sale_id);
 
@@ -812,6 +816,8 @@ create table if not exists public.orders (
   picked_up_at timestamptz,
   refunded_at timestamptz
 );
+-- when the seller was emailed about this purchase (claimed once, so never twice)
+alter table public.orders add column if not exists seller_notified_at timestamptz;
 
 create index if not exists orders_sale_id_idx on public.orders (sale_id, created_at);
 
@@ -1296,7 +1302,7 @@ begin
   insert into public.item_holds (item_id, sale_id, name, phone)
   values (p_item_id, v_sale.id, left(trim(p_name), 60), v_norm_phone)
   on conflict (item_id) do update
-    set name = excluded.name, phone = excluded.phone, created_at = now();
+    set name = excluded.name, phone = excluded.phone, created_at = now(), seller_notified_at = null;
 
   insert into public.reservation_log (sale_id, phone, client_ip)
   values (v_sale.id, v_norm_phone, v_ip);

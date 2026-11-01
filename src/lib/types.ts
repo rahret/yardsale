@@ -117,6 +117,8 @@ export interface Profile {
   city: string;
   state: string;
   zip: string;
+  /** Email the seller about purchases and holds. */
+  email_alerts: boolean;
   payment_options: PaymentOptions;
   created_at: string;
 }
