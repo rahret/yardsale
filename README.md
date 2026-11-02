@@ -298,7 +298,8 @@ Setup:
 
 `/dashboard/sales/[id]/sign` (the **🪧 Sign builder** button in the Share card) designs printed
 signs with a live preview: a title (presets or up to 16 characters), black / red / blue for the
-title and arrow, an arrow (left, right or straight ahead) with a short note, Off/S/M/L sizes for
+title and arrow, an arrow (left, right, or straight ahead — an arrow on each side of the title,
+which wraps onto more lines when that makes it bigger) with a short note, Off/S/M/L sizes for
 the QR code, address and dates, an optional extra line (tagline, top categories or custom),
 landscape or portrait, and one or two signs per sheet. Presets set up a main sign or arrow
 signs in one tap; the last design is remembered per sale on that device. Every size is a share

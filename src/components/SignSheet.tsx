@@ -14,7 +14,8 @@ import {
 } from "@/lib/signDesign";
 
 /** One printed sign, top to bottom: title, arrow (with its note), then the
- * QR code and the address / dates / extra line. Landscape puts the QR code
+ * QR code and the address / dates / extra line. "Straight ahead" puts an
+ * arrow on each side of the title instead. Landscape puts the QR code
  * beside the text; portrait puts it below. Every size is a share of the
  * sheet, so the same component draws the on-screen preview and the printed
  * page, whatever paper size is chosen. */
@@ -41,6 +42,7 @@ export default function SignSheet({
   if (extra) details.push({ key: "extra", lines: [extra], weight: 0.8 });
   const detailsWeight = details.reduce((n, d) => n + d.weight, 0) * 1.3;
   const showQr = design.qr !== "off";
+  const straightAhead = design.arrow === "up";
 
   const detailLines = details.map((d) => (
     <div key={d.key} className="min-h-0" style={{ flex: d.weight }}>
@@ -62,11 +64,36 @@ export default function SignSheet({
 
   return (
     <div className="w-full h-full flex flex-col bg-white text-black overflow-hidden" style={{ padding: "3%", gap: "2.5%" }}>
-      <div className="min-h-0" style={{ flex: TITLE_WEIGHT[design.titleSize], color }}>
-        <FitText lines={[design.title.toUpperCase()]} fontWeight={900} fill />
-      </div>
+      {straightAhead ? (
+        // ⬆ TITLE ⬆: the title sits between two arrows at their height,
+        // wrapping onto more lines when that makes it bigger
+        <div
+          className="min-h-0 flex items-stretch"
+          style={{ flex: Math.max(TITLE_WEIGHT[design.titleSize], ARROW_WEIGHT[design.arrowSize]), color, gap: "2%" }}
+        >
+          <div className="h-full shrink-0" style={{ aspectRatio: "0.6", maxWidth: "20%" }}>
+            <ArrowShape direction="up" />
+          </div>
+          <div className="min-h-0 min-w-0 flex-1">
+            <FitText lines={[design.title.toUpperCase()]} fontWeight={900} fill wrap />
+          </div>
+          <div className="h-full shrink-0" style={{ aspectRatio: "0.6", maxWidth: "20%" }}>
+            <ArrowShape direction="up" />
+          </div>
+        </div>
+      ) : (
+        <div className="min-h-0" style={{ flex: TITLE_WEIGHT[design.titleSize], color }}>
+          <FitText lines={[design.title.toUpperCase()]} fontWeight={900} fill />
+        </div>
+      )}
 
-      {design.arrow !== "none" && (
+      {straightAhead && design.arrowNote.trim() && (
+        <div className="min-h-0" style={{ flex: 0.7, color }}>
+          <FitText lines={[design.arrowNote.trim()]} fontWeight={800} fill />
+        </div>
+      )}
+
+      {(design.arrow === "left" || design.arrow === "right") && (
         <div className="min-h-0 flex flex-col" style={{ flex: ARROW_WEIGHT[design.arrowSize], color }}>
           <div className="min-h-0 w-full flex-1">
             <ArrowShape direction={design.arrow} />
