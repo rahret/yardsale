@@ -1,0 +1,376 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { shrinkImage } from "@/lib/shrinkImage";
+import { photoUrl } from "@/components/PhotoUploader";
+import { PRICE_PRESETS, PRICE_STEPS, nudgePrice, type SnapSuggestion } from "@/lib/snapList";
+import { ITEM_SELECT, friendlyDbError, money } from "@/lib/utils";
+import type { Item } from "@/lib/types";
+
+const BUCKET = "item-photos";
+/** Photos sent to Claude at the same time. */
+const PARALLEL = 3;
+
+type Status = "uploading" | "thinking" | "ready" | "error" | "adding";
+
+interface Draft {
+  id: string;
+  status: Status;
+  /** Storage path once uploaded (in the sale's own folder). */
+  path?: string;
+  /** A local preview while uploading. */
+  preview?: string;
+  error?: string;
+  name: string;
+  price: string;
+  category: string;
+  description: string;
+  quantity: number;
+  issue?: SnapSuggestion["issue"];
+  confidence?: SnapSuggestion["confidence"];
+}
+
+const ISSUE_NOTES: Record<string, string> = {
+  blurry: "The photo looks blurry — check the details, or retake it.",
+  multiple_items: "This photo shows several different items; the suggestion is for the main one.",
+  not_an_item: "We couldn't see an item to sell in this photo.",
+};
+
+/** Snap & list: take or pick photos; each is uploaded, Claude suggests a
+ * listing, and the seller reviews (adjusting the price with quick buttons)
+ * before adding. Drafts are kept on this device until added or discarded. */
+export default function SnapList({
+  saleId,
+  itemCount,
+  itemLimit,
+  onAdded,
+}: {
+  saleId: string;
+  itemCount: number;
+  /** Items still allowed (the trial's 25), or null for no limit. */
+  itemLimit: number | null;
+  onAdded: (item: Item) => void;
+}) {
+  const storageKey = `snap:${saleId}`;
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  // photos waiting their turn, worked through a few at a time
+  const queue = useRef<{ id: string; file: File }[]>([]);
+  const running = useRef(0);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const pickRef = useRef<HTMLInputElement>(null);
+
+  // drafts that were waiting for review when the page was closed; nothing is
+  // saved back until they've been read, so they can't be overwritten first
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]") as Draft[];
+      if (Array.isArray(saved)) {
+        const restored = saved.filter((d) => d.path && d.status === "ready");
+        setDrafts((ds) => [...restored.filter((r) => !ds.some((d) => d.id === r.id)), ...ds]);
+      }
+    } catch {}
+    setLoaded(true);
+  }, [storageKey]);
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      const keep = drafts.filter((d) => d.status === "ready").map(({ preview: _p, ...d }) => d);
+      localStorage.setItem(storageKey, JSON.stringify(keep));
+    } catch {}
+  }, [drafts, storageKey, loaded]);
+
+  const patch = (id: string, p: Partial<Draft>) => setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...p } : d)));
+
+  function addFiles(list: FileList | null) {
+    if (!list?.length) return;
+    const added = Array.from(list)
+      .filter((f) => f.type.startsWith("image/"))
+      .map((file) => ({ id: crypto.randomUUID(), file }));
+    setDrafts((ds) => [
+      ...ds,
+      ...added.map(({ id, file }) => ({
+        id,
+        status: "uploading" as Status,
+        preview: URL.createObjectURL(file),
+        name: "",
+        price: "",
+        category: "",
+        description: "",
+        quantity: 1,
+      })),
+    ]);
+    queue.current.push(...added);
+    pump();
+  }
+
+  function pump() {
+    while (running.current < PARALLEL && queue.current.length > 0) {
+      const next = queue.current.shift()!;
+      running.current++;
+      process(next.id, next.file).finally(() => {
+        running.current--;
+        pump();
+      });
+    }
+  }
+
+  async function process(id: string, original: File) {
+    try {
+      const file = await shrinkImage(original);
+      const path = `${saleId}/snap/${crypto.randomUUID()}.jpg`;
+      const { error } = await createClient().storage.from(BUCKET).upload(path, file, {
+        contentType: file.type,
+        cacheControl: "3600",
+      });
+      if (error) return patch(id, { status: "error", error: friendlyDbError(error.message) });
+      patch(id, { path, status: "thinking" });
+      await suggest(id, path);
+    } catch {
+      patch(id, { status: "error", error: "Couldn't upload that photo — check your connection." });
+    }
+  }
+
+  async function suggest(id: string, path: string, attempt = 0): Promise<void> {
+    const res = await fetch("/api/items/suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ saleId, path }),
+    }).catch(() => null);
+    const body = res ? await res.json().catch(() => ({})) : {};
+    if (res?.status === 429 && attempt < 3 && /retry/.test(body.error || "")) {
+      await new Promise((r) => setTimeout(r, 3000 * (attempt + 1)));
+      return suggest(id, path, attempt + 1);
+    }
+    if (!res?.ok || !body.suggestion) {
+      // still reviewable: the seller can fill it in by hand
+      return patch(id, { status: "ready", error: body.error || "Couldn't get a suggestion — fill it in yourself." });
+    }
+    const s = body.suggestion as SnapSuggestion;
+    patch(id, {
+      status: "ready",
+      name: s.name,
+      price: String(s.price),
+      category: s.category,
+      description: s.description,
+      quantity: s.quantity,
+      issue: s.issue,
+      confidence: s.confidence,
+    });
+  }
+
+  async function add(d: Draft) {
+    if (!d.name.trim()) return patch(d.id, { error: "Give it a name first." });
+    patch(d.id, { status: "adding", error: undefined });
+    const supabase = createClient();
+    const quantity = Math.max(1, d.quantity || 1);
+    const { data: item, error } = await supabase
+      .from("items")
+      .insert({
+        sale_id: saleId,
+        name: d.name.trim().slice(0, 60),
+        price: Number(d.price) || 0,
+        category: d.category.trim() || "Misc",
+        description: d.description.trim(),
+        icon: "📦",
+        quantity_total: quantity,
+        quantity_available: quantity,
+        sell_mode: "in_person",
+      })
+      .select("id")
+      .single();
+    if (error || !item) return patch(d.id, { status: "ready", error: friendlyDbError(error?.message) });
+    if (d.path) await supabase.from("item_photos").insert({ item_id: item.id, storage_path: d.path, position: 0 });
+    const { data: full } = await supabase.from("items").select(ITEM_SELECT).eq("id", item.id).single();
+    setDrafts((ds) => ds.filter((x) => x.id !== d.id));
+    if (full) onAdded(full as Item);
+  }
+
+  async function discard(d: Draft) {
+    setDrafts((ds) => ds.filter((x) => x.id !== d.id));
+    if (d.path) await createClient().storage.from(BUCKET).remove([d.path]);
+  }
+
+  async function addAll() {
+    const ready = drafts.filter((d) => d.status === "ready" && d.name.trim() && !d.error);
+    const room = itemLimit === null ? ready.length : Math.max(0, itemLimit - itemCount);
+    for (const d of ready.slice(0, room)) await add(d);
+  }
+
+  const busy = drafts.filter((d) => d.status === "uploading" || d.status === "thinking").length;
+  const readyCount = drafts.filter((d) => d.status === "ready" && d.name.trim() && !d.error).length;
+  const full = itemLimit !== null && itemCount >= itemLimit;
+  const btn = "border-2 border-cardboard-dark bg-white font-bold px-2 py-1 rounded-lg text-xs";
+
+  return (
+    <div className="border-2 border-dashed border-grass rounded-xl p-3 mb-4 bg-grass/5">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <div className="font-bold text-sm">📸 Snap &amp; list</div>
+          <div className="text-xs opacity-70">
+            Photograph items one after another — we suggest a name, category and price for each. You check them before
+            they&apos;re added.
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={full}
+            onClick={() => cameraRef.current?.click()}
+            className="bg-grass text-white font-bold px-3 py-2 rounded-lg text-sm shadow-tag disabled:opacity-50"
+          >
+            📷 Take photo
+          </button>
+          <button type="button" disabled={full} onClick={() => pickRef.current?.click()} className={`${btn} text-sm px-3 py-2 disabled:opacity-50`}>
+            🖼️ Choose photos
+          </button>
+        </div>
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <input
+          ref={pickRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+      </div>
+
+      {drafts.length > 0 && (
+        <>
+          <div className="flex items-center justify-between gap-2 mt-3 flex-wrap">
+            <div className="text-xs font-semibold opacity-70" aria-live="polite">
+              {busy > 0 ? `Working on ${busy} photo${busy === 1 ? "" : "s"}… ` : ""}
+              {readyCount > 0 ? `${readyCount} ready to review` : ""}
+            </div>
+            {readyCount > 1 && (
+              <button type="button" onClick={addAll} disabled={full} className="bg-ink text-chalk font-bold px-3 py-1.5 rounded-lg text-xs disabled:opacity-50">
+                Add all {readyCount}
+              </button>
+            )}
+          </div>
+          <div className="grid gap-3 mt-2">
+            {drafts.map((d) => (
+              <DraftCard key={d.id} d={d} onChange={(p) => patch(d.id, p)} onAdd={() => add(d)} onDiscard={() => discard(d)} disabled={full} />
+            ))}
+          </div>
+        </>
+      )}
+      {full && (
+        <div className="text-xs font-semibold text-marker mt-2">
+          You&apos;ve reached your plan&apos;s item limit — upgrade to add more.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DraftCard({
+  d,
+  onChange,
+  onAdd,
+  onDiscard,
+  disabled,
+}: {
+  d: Draft;
+  onChange: (p: Partial<Draft>) => void;
+  onAdd: () => void;
+  onDiscard: () => void;
+  disabled: boolean;
+}) {
+  const src = d.preview || (d.path ? photoUrl(d.path) : undefined);
+  const working = d.status === "uploading" || d.status === "thinking";
+  const input = "w-full px-2 py-1.5 border-2 border-cardboard-dark rounded-lg text-sm";
+  const price = Number(d.price) || 0;
+
+  return (
+    <div className="bg-white border-2 border-cardboard-dark rounded-xl p-2.5 flex gap-3">
+      <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-chalk-dim">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {src && <img src={src} alt="" className="w-full h-full object-cover" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        {working ? (
+          <div className="text-sm opacity-70 py-6">{d.status === "uploading" ? "Uploading…" : "✨ Looking at your photo…"}</div>
+        ) : (
+          <>
+            <input
+              value={d.name}
+              maxLength={60}
+              onChange={(e) => onChange({ name: e.target.value, error: undefined })}
+              placeholder="Item name"
+              className={`${input} font-bold`}
+              aria-label="Item name"
+            />
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <span className="text-sm font-bold">$</span>
+              <input
+                type="number"
+                min={0}
+                step="0.25"
+                value={d.price}
+                onChange={(e) => onChange({ price: e.target.value })}
+                className="w-20 px-2 py-1.5 border-2 border-cardboard-dark rounded-lg text-sm"
+                aria-label="Price"
+              />
+              {PRICE_STEPS.map((s) => (
+                <button key={s} type="button" onClick={() => onChange({ price: String(nudgePrice(price, s)) })} className="border-2 border-cardboard-dark/60 rounded-full px-2 py-0.5 text-xs font-bold">
+                  {s > 0 ? `+$${s}` : `−$${-s}`}
+                </button>
+              ))}
+              {PRICE_PRESETS.map((p) => (
+                <button key={p} type="button" onClick={() => onChange({ price: String(p) })} className={`border-2 rounded-full px-2 py-0.5 text-xs font-bold ${price === p ? "bg-ink text-chalk border-ink" : "border-cardboard-dark/60"}`}>
+                  {money(p)}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-[1fr_auto] gap-1.5 mt-1.5">
+              <input value={d.category} onChange={(e) => onChange({ category: e.target.value })} placeholder="Category" className={input} aria-label="Category" />
+              {d.quantity > 1 && <span className="text-xs font-bold self-center">× {d.quantity} (bulk)</span>}
+            </div>
+            <textarea
+              value={d.description}
+              onChange={(e) => onChange({ description: e.target.value })}
+              placeholder="Description (optional)"
+              rows={2}
+              className={`${input} mt-1.5`}
+              aria-label="Description"
+            />
+            {d.issue && d.issue !== "none" && <div className="text-[11px] font-semibold text-amber mt-1">{ISSUE_NOTES[d.issue]}</div>}
+            {d.confidence === "low" && d.issue === "none" && (
+              <div className="text-[11px] opacity-70 mt-1">Not too sure about this one — double-check the name and price.</div>
+            )}
+            {d.error && <div className="text-[11px] font-semibold text-marker mt-1">{d.error}</div>}
+            <div className="flex gap-2 mt-2">
+              <button
+                type="button"
+                onClick={onAdd}
+                disabled={disabled || d.status === "adding" || !d.name.trim()}
+                className="bg-grass text-white font-bold px-3 py-1.5 rounded-lg text-xs disabled:opacity-50"
+              >
+                {d.status === "adding" ? "Adding…" : "✓ Add item"}
+              </button>
+              <button type="button" onClick={onDiscard} className="text-xs font-semibold opacity-70 underline">
+                Discard
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

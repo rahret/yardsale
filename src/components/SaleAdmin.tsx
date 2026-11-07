@@ -9,6 +9,7 @@ import { PAYMENT_LABELS, paymentMethodsFromProfile } from "@/lib/saleInfo";
 import { EMOJI_PRESETS, ITEM_SELECT, formatAddress, formatPhone, isBulkItem, money, siteOrigin, sortSaleDays, friendlyDbError } from "@/lib/utils";
 import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import ShareSaleCard from "@/components/ShareSaleCard";
+import SnapList from "@/components/SnapList";
 import BuyNowCard from "@/components/BuyNowCard";
 import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
 import { MIN_CHARGE_CENTS, toCents } from "@/lib/fees";
@@ -972,6 +973,15 @@ export default function SaleAdmin({
             </UpgradeNote>
           </div>
         )}
+        {access !== "none" && (
+          <SnapList
+            saleId={sale.id}
+            itemCount={items.length}
+            itemLimit={access === "trial" ? TRIAL_LIMITS.items : null}
+            onAdded={(item) => setItems((prev) => [item, ...prev])}
+          />
+        )}
+        <div className="text-xs font-bold opacity-70 mb-2">Or type one in</div>
         <form onSubmit={addItem}>
           <div className="flex gap-1.5 flex-wrap mb-3">
             {EMOJI_PRESETS.map((e) => (
