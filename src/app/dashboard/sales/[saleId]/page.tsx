@@ -62,6 +62,14 @@ export default async function SaleAdminPage({
     .in("status", ["paid", "picked_up", "refunded", "conflict"])
     .order("created_at", { ascending: false });
 
+  // the seller's other sales, for "move unsold items"
+  const { data: otherSales } = await supabase
+    .from("sales")
+    .select("id, name, status, created_at")
+    .eq("owner_id", sale.owner_id)
+    .neq("id", sale.id)
+    .order("created_at", { ascending: false });
+
   return (
     <SaleAdmin
       sale={sale}
@@ -74,6 +82,7 @@ export default async function SaleAdminPage({
       justCreated={searchParams.welcome === "1"}
       access={accessFor(billing)}
       snapAi={snapAiEnabled()}
+      otherSales={otherSales || []}
     />
   );
 }

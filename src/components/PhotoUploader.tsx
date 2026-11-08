@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ItemPhoto } from "@/lib/types";
 import { shrinkImage } from "@/lib/shrinkImage";
+import { removeUnusedPhotoFiles } from "@/lib/photoFiles";
 
 const BUCKET = "item-photos";
 
@@ -69,8 +70,10 @@ export default function PhotoUploader({
 
   async function deletePhoto(photo: ItemPhoto) {
     const supabase = createClient();
-    await supabase.storage.from(BUCKET).remove([photo.storage_path]);
-    await supabase.from("item_photos").delete().eq("id", photo.id);
+    const { error } = await supabase.from("item_photos").delete().eq("id", photo.id);
+    if (error) return;
+    // a copied sale's items share photo files, so only delete it if it's unused now
+    await removeUnusedPhotoFiles(supabase, [photo.storage_path]);
     onChange(photos.filter((p) => p.id !== photo.id));
   }
 

@@ -1332,6 +1332,145 @@ $$;
 
 grant execute on function public.reserve_item(uuid, text, text) to anon, authenticated;
 
+-- ----------------------------------------------------------------------------
+-- copy_sale: starts a new draft sale from one of the seller's sales — its
+-- details (name, address, payment methods…) and, if asked, its items: 'all',
+-- 'unsold' (a bulk lot brings only what's left) or 'none'. Dates, the note to
+-- buyers, holds, sales and visit counts are not copied. Copied items share
+-- the original photo files (new item_photos rows, same storage paths); the
+-- app only deletes a file once no item uses it.
+-- Runs with the caller's privileges, so RLS and the plan triggers (one sale
+-- on the trial, Holds / Buy Now on paid plans) apply as for any other insert.
+-- ----------------------------------------------------------------------------
+create or replace function public.copy_sale(p_sale_id uuid, p_name text, p_slug text, p_items text default 'unsold')
+returns uuid
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_src public.sales%rowtype;
+  v_new uuid;
+  v_item record;
+  v_item_id uuid;
+  v_qty int;
+begin
+  if p_items not in ('all', 'unsold', 'none') then
+    raise exception 'Choose all, unsold or no items.' using errcode = 'P0001';
+  end if;
+  -- published sales are readable by anyone, so check ownership explicitly
+  select * into v_src from public.sales where id = p_sale_id and owner_id = auth.uid();
+  if not found then
+    raise exception 'Sale not found.' using errcode = 'P0001';
+  end if;
+
+  insert into public.sales (
+    owner_id, slug, name, tagline, street, city, state, zip, show_full_address, timezone,
+    accepted_payments, default_reservation_minutes, listed, lat, lng
+  ) values (
+    v_src.owner_id, p_slug, coalesce(nullif(btrim(p_name), ''), v_src.name), v_src.tagline, v_src.street,
+    v_src.city, v_src.state, v_src.zip, v_src.show_full_address, v_src.timezone,
+    v_src.accepted_payments, v_src.default_reservation_minutes, v_src.listed, v_src.lat, v_src.lng
+  )
+  returning id into v_new;
+
+  if p_items = 'none' then
+    return v_new;
+  end if;
+
+  for v_item in
+    select * from public.items
+    where sale_id = p_sale_id
+      and (p_items = 'all' or (status <> 'sold' and quantity_available > 0))
+    order by created_at, id
+  loop
+    v_qty := case when p_items = 'unsold' and v_item.quantity_total > 1 then v_item.quantity_available
+                  else v_item.quantity_total end;
+    insert into public.items (
+      sale_id, name, description, category, price, icon, reservation_minutes, sort_order,
+      quantity_total, quantity_available, featured, sell_mode, created_at
+    ) values (
+      v_new, v_item.name, v_item.description, v_item.category, v_item.price, v_item.icon,
+      v_item.reservation_minutes, v_item.sort_order, v_qty, v_qty, v_item.featured,
+      case when v_qty > 1 then 'in_person' else v_item.sell_mode end,
+      -- keeps the original order (the item list sorts by created_at)
+      clock_timestamp()
+    )
+    returning id into v_item_id;
+    insert into public.item_photos (item_id, storage_path, position)
+      select v_item_id, storage_path, position from public.item_photos where item_id = v_item.id;
+  end loop;
+  return v_new;
+end;
+$$;
+
+grant execute on function public.copy_sale(uuid, text, text, text) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- move_unsold_items: moves every unsold item that isn't on hold from one of
+-- the seller's sales to another of their sales, photos and all. A bulk lot
+-- that has partly sold is split: what's left moves (as a new item), and the
+-- sold units stay behind with their revenue, so the old sale's numbers don't
+-- change. Returns how many items moved. Needs a current plan, as adding
+-- items does.
+-- ----------------------------------------------------------------------------
+create or replace function public.move_unsold_items(p_from uuid, p_to uuid)
+returns int
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_item record;
+  v_item_id uuid;
+  v_moved int := 0;
+  v_sort int;
+begin
+  if p_from = p_to then
+    raise exception 'Pick a different sale.' using errcode = 'P0001';
+  end if;
+  if not exists (select 1 from public.sales where id = p_from and owner_id = v_owner)
+    or not exists (select 1 from public.sales where id = p_to and owner_id = v_owner) then
+    raise exception 'Sale not found.' using errcode = 'P0001';
+  end if;
+  if public.seller_access(v_owner) = 'none' then
+    raise exception 'Start your free trial or choose a plan to add items.' using errcode = 'P0001';
+  end if;
+
+  select coalesce(max(sort_order), 0) into v_sort from public.items where sale_id = p_to;
+
+  for v_item in
+    select * from public.items
+    where sale_id = p_from and status in ('available', 'low_stock') and quantity_available > 0
+    order by created_at, id
+    for update
+  loop
+    v_sort := v_sort + 1;
+    if v_item.quantity_total > 1 and v_item.quantity_available < v_item.quantity_total then
+      -- partly sold bulk lot: the remainder becomes a new item in the next sale
+      insert into public.items (
+        sale_id, name, description, category, price, icon, sort_order,
+        quantity_total, quantity_available, featured, sell_mode, created_at
+      ) values (
+        p_to, v_item.name, v_item.description, v_item.category, v_item.price, v_item.icon, v_sort,
+        v_item.quantity_available, v_item.quantity_available, v_item.featured, 'in_person', clock_timestamp()
+      )
+      returning id into v_item_id;
+      insert into public.item_photos (item_id, storage_path, position)
+        select v_item_id, storage_path, position from public.item_photos where item_id = v_item.id;
+      update public.items
+        set quantity_total = quantity_total - quantity_available, quantity_available = 0
+        where id = v_item.id;
+    else
+      update public.items set sale_id = p_to, sort_order = v_sort where id = v_item.id;
+    end if;
+    v_moved := v_moved + 1;
+  end loop;
+  return v_moved;
+end;
+$$;
+
+grant execute on function public.move_unsold_items(uuid, uuid) to authenticated;
+
 -- ============================================================================
 -- STORAGE: create a public bucket called "item-photos" for listing photos.
 -- Do this once in the Supabase dashboard: Storage -> New bucket -> name it

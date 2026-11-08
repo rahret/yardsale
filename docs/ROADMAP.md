@@ -44,12 +44,12 @@ _Last updated: 2026-11-01_
 - ✅ **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
   Add arrow signs ("← YARD SALE, 2 blocks") with a small QR code, plus a quarter-page flyer
   for neighborhood boards.
-  - _Done (pending merge):_ **Sign builder** — title (presets or up to 16 characters), title
+  - _Shipped in #31:_ **Sign builder** — title (presets or up to 16 characters), title
     and arrow colour, arrow left / right / straight ahead with a note ("2 blocks"), S/M/L/off
     for the QR code, address and dates, an extra line (tagline, categories or custom), "Scan for
     photos & prices" under the QR code, landscape/portrait, two signs per sheet, one-tap
     presets, live preview; remembers the last design per sale.
-  - _Done (pending merge):_ **Flyer** — 4 per sheet (quarter page, cut lines) or 1 per sheet;
+  - _Shipped in #35:_ **Flyer** — 4 per sheet (quarter page, cut lines) or 1 per sheet;
     title and colour, optional sale name, tagline, dates, address, top categories and QR code
     (`?src=flyer`). No item photos — the QR code does the showing.
 - 🟡 **There's no "remind me".** Let buyers add the sale to their calendar, or follow it and get
@@ -90,14 +90,14 @@ _Last updated: 2026-11-01_
 - 🟡 **The seller isn't told about reservations.** Nothing sends a text or email when someone
   reserves an item, so the seller has to keep checking the dashboard. The README already
   lists texting buyers about expiring holds as a next step.
-  - _Done (pending merge):_ email alerts (ZeptoMail) for every hold and Buy Now purchase —
+  - _Shipped in #30:_ email alerts (ZeptoMail) for every hold and Buy Now purchase —
     item, buyer, phone or pickup code, and when a hold runs out; on/off on the Account page.
   - _Still to do:_ text-message alerts; a morning-of summary; texting buyers about expiring
     holds.
-- ⬜ **Adding items is slow.** Typing in 80 items is the biggest reason sellers will give up. A
+- 🟡 **Adding items is slow.** Typing in 80 items is the biggest reason sellers will give up. A
   photo-first flow would help: snap photos in a row and fill in each item from the photo,
   with AI suggesting a name, category and price.
-  - _Done (pending merge):_ **Snap & list** — photo-first: take/choose photos and each becomes
+  - _Shipped in #33, #34:_ **Snap & list** — photo-first: take/choose photos and each becomes
     an item card to name and price (works now, no AI needed). With an Anthropic key, Claude
     also suggests name,
     category, price, description and quantity; review with price buttons, add one or all.
@@ -118,12 +118,19 @@ _Last updated: 2026-11-01_
     until approved (recommended yes).
 - ✅ **There are no printed price tags.** Printing tag sheets that match the listing (and
   optionally carry each item's QR code) ties the physical sale to the online one.
-  - _Done (pending merge):_ **Price tags** — pick items; Avery 5160/8160 (30 per sheet),
+  - _Shipped in #35:_ **Price tags** — pick items; Avery 5160/8160 (30 per sheet),
     Avery 5163/8163 (10 per sheet) or plain paper cut apart (18 per sheet); name, price ("$2
     each" for bulk lots, "FREE" for $0) and an optional QR code to the item (`?src=tag`);
     start partway down a used label sheet.
-- ⬜ **Each sale starts from scratch.** Add "copy this sale" and "move unsold items to my next
+- 🟡 **Each sale starts from scratch.** Add "copy this sale" and "move unsold items to my next
   sale", plus multi-family sales with several sellers on one sale.
+  - _Done (pending merge):_ **♻️ Next sale** card on the sale page. **Copy to a new sale**: a
+    new draft with the same name (editable), address, tagline and payment methods, plus
+    unsold, all or no items (photos shared, not re-uploaded; no dates, note, holds or stats).
+    **Move unsold items** to another of your sales: holds stay for their buyer, and a part-sold
+    bulk lot moves what's left while what sold stays in the old sale's totals. Copying a sale
+    needs Pro or the Sale Pass (the trial has one sale).
+  - _Still to do:_ multi-family sales.
 - 🟡 **There are no numbers.** Sellers can't see page views, QR scans versus link visits,
   most-viewed items or reservations. That's what proves the app brought them buyers, and it's
   the clearest thing to put on a paid plan.
@@ -187,17 +194,18 @@ _Last updated: 2026-11-01_
     (default: seller keeps payment and can refund by hand), legal/tax review before launch.
 - ✅ **Email notifications.** Purchase and hold alerts to sellers; Stripe's own receipt
   covers buyers for now.
-  - _Done (pending merge):_ sent through **ZeptoMail** (Zoho) from the app's own domain;
+  - _Shipped in #30:_ sent through **ZeptoMail** (Zoho) from the app's own domain;
     each alert is sent once even if Stripe repeats an event.
 
 ## 6. Other ideas & follow-ups
 
 - ⬜ Seller-side live updates on the dashboard (reservations appear without reloading).
 - ✅ Item photos are stored at full phone size; shrinking them on upload would speed up the
-  buyer page and save storage. _Done (pending merge):_ scaled to 1,600 px JPEG in the
+  buyer page and save storage. _Shipped in #30:_ scaled to 1,600 px JPEG in the
   browser before upload (also strips the photo's GPS location).
 - ✅ Deleting an item doesn't remove its photo files from storage (account deletion does).
-  _Done (pending merge)._
+  _Shipped in #16._ Since copied sales share photo files, a file is now removed only once no
+  item uses it.
 
 ---
 
