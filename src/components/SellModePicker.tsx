@@ -5,6 +5,13 @@ import { MIN_CHARGE_CENTS, toCents } from "@/lib/fees";
 import { money } from "@/lib/utils";
 import { LockedBadge } from "@/components/PlanOptions";
 
+/** Shorter names for the compact picker (Snap & list cards). */
+const SHORT_LABELS: Record<SellMode, string> = {
+  in_person: "🏃 FCFS",
+  hold: "✋ Hold",
+  buy_now: "💳 Buy Now",
+};
+
 export const SELL_MODE_LABELS: Record<SellMode, string> = {
   in_person: "🏃 First come, first served",
   hold: "✋ Hold",
@@ -40,6 +47,7 @@ export default function SellModePicker({
   premium,
   price,
   currentMode,
+  compact = false,
 }: {
   value: SellMode;
   onChange: (mode: SellMode) => void;
@@ -48,28 +56,30 @@ export default function SellModePicker({
   premium: boolean;
   price: string;
   currentMode?: SellMode;
+  /** One line per option: short names, no descriptions. */
+  compact?: boolean;
 }) {
   const locked = (mode: SellMode) => !premium && currentMode !== mode;
   const buyNowBlocked = !payoutsReady && currentMode !== "buy_now";
   const tooCheap = price !== "" && toCents(Number(price) || 0) < MIN_CHARGE_CENTS;
   const option = (mode: SellMode, title: string, hint: string, disabled = false, lock = false) => (
     <label
-      className={`flex items-start gap-2 border-2 rounded-lg px-3 py-2 cursor-pointer ${
+      className={`flex ${compact ? "items-center py-1.5" : "items-start py-2"} gap-2 border-2 rounded-lg px-3 cursor-pointer ${
         value === mode ? "border-ink bg-chalk" : "border-cardboard-dark/50 bg-white"
       } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
     >
       <input
         type="radio"
-        className="mt-1"
+        className={compact ? "" : "mt-1"}
         checked={value === mode}
         disabled={disabled}
         onChange={() => onChange(mode)}
       />
       <span>
-        <span className="block text-sm font-bold">
-          {title} {lock && <LockedBadge className="ml-1 align-middle" />}
+        <span className="block text-sm font-bold whitespace-nowrap">
+          {compact ? SHORT_LABELS[mode] : title} {lock && <LockedBadge className="ml-1 align-middle" />}
         </span>
-        <span className="block text-[11px] opacity-60">{hint}</span>
+        {!compact && <span className="block text-[11px] opacity-60">{hint}</span>}
       </span>
     </label>
   );

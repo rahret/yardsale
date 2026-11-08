@@ -413,7 +413,7 @@ function DraftCard({
                   onChange({ isBulk: e.target.checked, quantity: e.target.checked ? Math.max(2, d.quantity) : 1, error: undefined })
                 }
               />
-              Sell as a bulk lot (several identical items, e.g. 20 books)
+              Sell as a bulk lot
             </label>
             {d.isBulk ? (
               <div className="flex items-center gap-2 mt-1.5 mb-1">
@@ -440,6 +440,7 @@ function DraftCard({
                   payoutsReady={payoutsReady}
                   premium={premium}
                   price={d.price}
+                  compact
                 />
               </div>
             )}
