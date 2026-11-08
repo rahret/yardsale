@@ -12,7 +12,10 @@ export async function POST(request: NextRequest) {
   const itemId = typeof body?.itemId === "string" && /^[0-9a-f-]{36}$/i.test(body.itemId) ? body.itemId : null;
   if (!itemId) return NextResponse.json({ error: "Missing item." }, { status: 400 });
   const admin = createAdminClient();
-  if (!admin) return NextResponse.json({ sent: false });
+  if (!admin) {
+    console.error("Hold emails not sent: SUPABASE_SERVICE_ROLE_KEY isn't set on the server");
+    return NextResponse.json({ sent: false });
+  }
   const [seller, buyer] = await Promise.all([notifyHoldPlaced(admin, itemId), notifyBuyerHoldPlaced(admin, itemId)]);
   return NextResponse.json({ sent: seller === "seller notified", buyerEmailed: buyer === "buyer notified" });
 }

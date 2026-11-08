@@ -32,6 +32,7 @@ export default function ShopView({
   saleDays,
   initialItemId,
   holdsAndBuyNow = true,
+  onlinePayments = true,
 }: {
   sale: Sale;
   initialItems: Item[];
@@ -40,6 +41,8 @@ export default function ShopView({
   initialItemId?: string;
   /** The seller's plan includes Holds and Buy Now; without it, every item is first come, first served. */
   holdsAndBuyNow?: boolean;
+  /** The site can take online payments (Stripe is set up on the server). */
+  onlinePayments?: boolean;
 }) {
   const [rawItems, setItems] = useState<Item[]>(initialItems);
   const items = useMemo(
@@ -244,6 +247,7 @@ export default function ShopView({
           item={selected}
           sale={sale}
           days={sortedDays}
+          onlinePayments={onlinePayments}
           myHold={myHoldOn(selected, myHolds)}
           onClose={() => setSelectedId(null)}
           onReserved={(next, hold) => {
@@ -419,6 +423,7 @@ function DetailSheet({
   item,
   sale,
   days,
+  onlinePayments,
   myHold,
   onClose,
   onReserved,
@@ -426,6 +431,7 @@ function DetailSheet({
   item: Item;
   sale: Sale;
   days: SaleDay[];
+  onlinePayments: boolean;
   /** This buyer's own hold on the item (placed from this device). */
   myHold: MyHold | null;
   onClose: () => void;
@@ -440,7 +446,7 @@ function DetailSheet({
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState("");
   const isBuyNow = item.sell_mode === "buy_now";
-  const canBuyNow = isBuyNow && canBuyOnline(item);
+  const canBuyNow = isBuyNow && canBuyOnline(item) && onlinePayments;
 
   async function buyNow() {
     setBuyError("");
@@ -656,12 +662,18 @@ function DetailSheet({
                     {buying ? "Opening checkout…" : `Buy now · ${money(item.price)}`}
                   </button>
                 ) : (
-                  <div className="text-sm text-center opacity-70">Ask the seller about this one at the sale.</div>
+                  <div className="text-sm text-center opacity-70">
+                    {onlinePayments
+                      ? "Ask the seller about this one at the sale."
+                      : "Online payment is off right now — you can still buy it at the sale."}
+                  </div>
                 )}
-                <div className="text-xs opacity-60 text-center mt-1.5">
-                  Card, Apple Pay, Google Pay or Cash App Pay. It&apos;s yours right away — pick it up at the sale
-                  with your code.
-                </div>
+                {canBuyNow && (
+                  <div className="text-xs opacity-60 text-center mt-1.5">
+                    Card, Apple Pay, Google Pay or Cash App Pay. It&apos;s yours right away — pick it up at the sale
+                    with your code.
+                  </div>
+                )}
                 {buyError && <div className="text-marker text-sm font-semibold mt-2 text-center">{buyError}</div>}
               </div>
             ) : (

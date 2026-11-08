@@ -17,6 +17,7 @@ import NextSaleCard, { type OtherSale } from "@/components/NextSaleCard";
 import { removeUnusedPhotoFiles } from "@/lib/photoFiles";
 import { useSaleLive } from "@/components/useSaleLive";
 import ActiveHolds from "@/components/ActiveHolds";
+import type { ServerSetup } from "@/lib/serverSetup";
 import { SELLER_ORDER_STATUSES, newHolds, newPaidOrders } from "@/lib/liveUpdates";
 import { HOUR_OPTIONS, toHour } from "@/lib/hours";
 import { normalizeAddress, addressFormatError } from "@/lib/address";
@@ -70,6 +71,7 @@ export default function SaleAdmin({
   access = "full",
   snapAi = false,
   otherSales = [],
+  setup = { paymentsMissing: [], emailMissing: [] },
 }: {
   sale: Sale;
   initialItems: Item[];
@@ -88,6 +90,8 @@ export default function SaleAdmin({
   snapAi?: boolean;
   /** The seller's other sales, for moving unsold items. */
   otherSales?: OtherSale[];
+  /** Server settings that are missing (names only), shown as warnings. */
+  setup?: ServerSetup;
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
@@ -807,6 +811,7 @@ export default function SaleAdmin({
             </UpgradeNote>
           </div>
         )}
+        <SetupWarnings setup={setup} />
         <ActiveHolds
           items={items}
           sale={sale}
@@ -822,6 +827,7 @@ export default function SaleAdmin({
           orders={orders}
           onOrderUpdated={(o) => setOrders((prev) => prev.map((p) => (p.id === o.id ? o : p)))}
           onItemsChanged={reloadItems}
+          serverReady={setup.paymentsMissing.length === 0}
         />
       </Card>
 
@@ -1697,4 +1703,31 @@ function Thumb({ item }: { item: Item }) {
     );
   }
   return <div className="w-11 h-11 flex items-center justify-center text-2xl flex-shrink-0">{item.icon}</div>;
+}
+
+/** Tells the seller (only) that Buy Now or emails can't work because a server
+ * setting is missing, naming it, instead of letting them fail quietly. */
+function SetupWarnings({ setup }: { setup: ServerSetup }) {
+  if (!setup.paymentsMissing.length && !setup.emailMissing.length) return null;
+  const list = (names: string[]) => names.map((n) => <code key={n} className="font-mono text-[11px] bg-white/70 px-1 rounded mr-1">{n}</code>);
+  return (
+    <div className="bg-marker/10 border-2 border-marker/40 rounded-lg p-3 mb-4 text-sm space-y-2">
+      {setup.paymentsMissing.length > 0 && (
+        <p>
+          ⚠️ <strong>Buy Now is switched off on this site</strong>, so buyers can&apos;t pay online. Missing:{" "}
+          {list(setup.paymentsMissing)}
+        </p>
+      )}
+      {setup.emailMissing.length > 0 && (
+        <p>
+          ⚠️ <strong>Emails are switched off</strong>: no hold or purchase alerts for you, and no confirmations for
+          buyers. Missing: {list(setup.emailMissing)}
+        </p>
+      )}
+      <p className="text-xs opacity-75">
+        Add them in Vercel → your project → Settings → Environment Variables, ticking every environment you use
+        (Production, and Preview for test links), then redeploy.
+      </p>
+    </div>
+  );
 }

@@ -434,6 +434,16 @@ zone). The breakdown is part of Pro and the Sale Pass; other plans see the headl
 with an upgrade note. Item views are counted when a buyer opens an item (`item_views`, once
 per item per visit; a shared item link counts with the visit).
 
+## When something's not set up
+
+If a server setting is missing (Vercel → Settings → Environment Variables), the seller's sale
+page names it in the **Holds & Buy Now orders** card: `STRIPE_SECRET_KEY` /
+`SUPABASE_SERVICE_ROLE_KEY` for Buy Now, `SUPABASE_SERVICE_ROLE_KEY` / `ZEPTOMAIL_TOKEN` /
+`ALERT_FROM_EMAIL` for emails. Buyers then see "Online payment is off right now" instead of a
+Buy Now button that fails. **Send me a test email** on the Account page sends one email and
+shows ZeptoMail's exact error if it doesn't go out. Vercel's Preview deployments only get
+variables ticked for "Preview".
+
 ## Photos
 
 Photos are scaled in the browser to at most 1,600 px on the long side and saved as JPEG before

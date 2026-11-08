@@ -7,6 +7,7 @@ import { publicPhotoUrl } from "@/lib/share";
 import { checkoutSessionParams } from "@/lib/checkout";
 import { isEffectivelyExpired } from "@/lib/utils";
 import { accessFor } from "@/lib/billing";
+import { serverSetup } from "@/lib/serverSetup";
 import type { Item, Sale } from "@/lib/types";
 
 // "Buy Now": starts a Stripe Checkout for one item. Payment goes to the
@@ -19,7 +20,10 @@ export async function POST(request: NextRequest) {
 
   const stripe = getStripe();
   const admin = createAdminClient();
-  if (!stripe || !admin) return unavailable("Online payment isn't available right now.", 503);
+  if (!stripe || !admin) {
+    console.error(`Buy Now is off: not set on the server: ${serverSetup().paymentsMissing.join(", ")}`);
+    return unavailable("Online payment isn't switched on for this site yet — come by the sale to buy it.", 503);
+  }
 
   const body = await request.json().catch(() => null);
   const itemId = typeof body?.itemId === "string" ? body.itemId : null;
