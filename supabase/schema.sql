@@ -598,6 +598,9 @@ create table if not exists public.item_holds (
 );
 -- when the seller was emailed about this hold (claimed once, so never twice)
 alter table public.item_holds add column if not exists seller_notified_at timestamptz;
+-- optional: where to email the buyer their hold confirmation, and when it was sent
+alter table public.item_holds add column if not exists email text;
+alter table public.item_holds add column if not exists buyer_notified_at timestamptz;
 
 create index if not exists item_holds_sale_id_idx on public.item_holds (sale_id);
 
@@ -827,6 +830,8 @@ create table if not exists public.orders (
 );
 -- when the seller was emailed about this purchase (claimed once, so never twice)
 alter table public.orders add column if not exists seller_notified_at timestamptz;
+-- when the buyer was emailed their pickup code (claimed once, so never twice)
+alter table public.orders add column if not exists buyer_notified_at timestamptz;
 
 create index if not exists orders_sale_id_idx on public.orders (sale_id, created_at);
 
@@ -1244,10 +1249,13 @@ grant execute on function public.sweep_expired_reservations(uuid) to anon, authe
 -- The sales row is locked for the duration of the transaction so concurrent
 -- attempts on the same sale can't both slip past these checks.
 -- ----------------------------------------------------------------------------
+-- the 3-argument version (before the optional email) would be ambiguous next to this one
+drop function if exists public.reserve_item(uuid, text, text);
 create or replace function public.reserve_item(
   p_item_id uuid,
   p_name text,
-  p_phone text
+  p_phone text,
+  p_email text default null
 )
 returns jsonb
 language plpgsql
@@ -1260,7 +1268,14 @@ declare
   v_minutes int;
   v_headers json;
   v_ip text;
+  v_email text;
+  v_reserved_at timestamptz := now();
 begin
+  v_email := nullif(lower(btrim(coalesce(p_email, ''))), '');
+  if v_email is not null and (length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+    return jsonb_build_object('success', false, 'error', 'Enter a valid email, or leave it blank.');
+  end if;
+
   v_norm_phone := regexp_replace(coalesce(p_phone, ''), '\D', '', 'g');
   if length(v_norm_phone) = 11 and left(v_norm_phone, 1) = '1' then
     v_norm_phone := substr(v_norm_phone, 2);
@@ -1338,22 +1353,23 @@ begin
 
   update public.items
   set status = 'reserved',
-      reserved_at = now()
+      reserved_at = v_reserved_at
   where id = p_item_id;
 
-  insert into public.item_holds (item_id, sale_id, name, phone)
-  values (p_item_id, v_sale.id, left(trim(p_name), 60), v_norm_phone)
+  insert into public.item_holds (item_id, sale_id, name, phone, email)
+  values (p_item_id, v_sale.id, left(trim(p_name), 60), v_norm_phone, v_email)
   on conflict (item_id) do update
-    set name = excluded.name, phone = excluded.phone, created_at = now(), seller_notified_at = null;
+    set name = excluded.name, phone = excluded.phone, email = excluded.email, created_at = now(),
+        seller_notified_at = null, buyer_notified_at = null;
 
   insert into public.reservation_log (sale_id, phone, client_ip)
   values (v_sale.id, v_norm_phone, v_ip);
 
-  return jsonb_build_object('success', true, 'reservation_minutes', v_minutes);
+  return jsonb_build_object('success', true, 'reservation_minutes', v_minutes, 'reserved_at', v_reserved_at);
 end;
 $$;
 
-grant execute on function public.reserve_item(uuid, text, text) to anon, authenticated;
+grant execute on function public.reserve_item(uuid, text, text, text) to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- copy_sale: starts a new draft sale from one of the seller's sales — its

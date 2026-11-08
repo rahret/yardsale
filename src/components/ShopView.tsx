@@ -19,6 +19,7 @@ import ShareButton from "@/components/ShareButton";
 import SaleSummary from "@/components/SaleSummary";
 import { canBuyOnline } from "@/lib/fees";
 import { saleLink, siteOriginForClient } from "@/lib/share";
+import { loadMyHolds, myHoldOn, saveMyHold, type MyHold } from "@/lib/myHolds";
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
 
@@ -49,6 +50,9 @@ export default function ShopView({
     initialItemId && initialItems.some((i) => i.id === initialItemId) ? initialItemId : null
   );
   const [, forceTick] = useState(0);
+  // holds this buyer placed from this device ("You're holding this")
+  const [myHolds, setMyHolds] = useState<MyHold[]>([]);
+  useEffect(() => setMyHolds(loadMyHolds()), []);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -106,6 +110,7 @@ export default function ShopView({
   }, [items, filterCats, showSold, sort]);
 
   const selected = items.find((i) => i.id === selectedId) || null;
+  const heldByMe = items.filter((i) => myHoldOn(i, myHolds));
   const sortedDays = useMemo(() => sortSaleDays(saleDays), [saleDays]);
 
   function updateItem(next: Item) {
@@ -142,6 +147,29 @@ export default function ShopView({
         )}
       </div>
 
+      {heldByMe.length > 0 && (
+        <div className="mx-5 mb-4 space-y-2">
+          {heldByMe.map((i) => (
+            <button
+              key={i.id}
+              type="button"
+              onClick={() => setSelectedId(i.id)}
+              className="w-full text-left bg-amber/15 border-2 border-amber/50 rounded-xl px-4 py-3 flex items-center gap-3"
+            >
+              <span className="text-xl" aria-hidden>
+                ✋
+              </span>
+              <span className="flex-1 min-w-0 text-sm">
+                <strong>You&apos;re holding {i.name}</strong>
+                <span className="block text-xs opacity-75">
+                  {fmtMMSS(reservationDeadline(i, sale) - Date.now())} left · tap for pickup details
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <SaleSummary sale={sale} items={items} days={sortedDays} onOpenItem={setSelectedId} />
 
       <div className="px-5 pb-4 flex flex-wrap items-center gap-2">
@@ -172,7 +200,13 @@ export default function ShopView({
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 px-5">
           {visible.map((item, idx) => (
-            <Tag key={item.id} item={item} idx={idx} onClick={() => setSelectedId(item.id)} />
+            <Tag
+              key={item.id}
+              item={item}
+              idx={idx}
+              mine={!!myHoldOn(item, myHolds)}
+              onClick={() => setSelectedId(item.id)}
+            />
           ))}
         </div>
       )}
@@ -181,8 +215,13 @@ export default function ShopView({
         <DetailSheet
           item={selected}
           sale={sale}
+          days={sortedDays}
+          myHold={myHoldOn(selected, myHolds)}
           onClose={() => setSelectedId(null)}
-          onReserved={updateItem}
+          onReserved={(next, hold) => {
+            updateItem(next);
+            setMyHolds(saveMyHold(hold));
+          }}
         />
       )}
     </div>
@@ -275,7 +314,7 @@ function CategoryFilter({
   );
 }
 
-function Tag({ item, idx, onClick }: { item: Item; idx: number; onClick: () => void }) {
+function Tag({ item, idx, mine, onClick }: { item: Item; idx: number; mine: boolean; onClick: () => void }) {
   const rot = ((idx % 5) - 2) * 0.6;
   const photo = item.item_photos?.[0];
   return (
@@ -311,14 +350,14 @@ function Tag({ item, idx, onClick }: { item: Item; idx: number; onClick: () => v
         )}
         <div className="flex items-end justify-between flex-wrap gap-x-2 gap-y-1 mt-auto pt-2.5">
           <div className="font-marker text-2xl text-marker leading-none">{money(item.price)}</div>
-          <StatusPill item={item} />
+          <StatusPill item={item} mine={mine} />
         </div>
       </div>
     </div>
   );
 }
 
-function StatusPill({ item }: { item: Item }) {
+function StatusPill({ item, mine = false }: { item: Item; mine?: boolean }) {
   if (item.status === "sold") {
     return (
       <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-marker/20 text-marker">● Sold</div>
@@ -333,7 +372,9 @@ function StatusPill({ item }: { item: Item }) {
   }
   if (item.status === "reserved") {
     return (
-      <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber/20 text-amber">● Reserved</div>
+      <div className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber/20 text-amber">
+        {mine ? "✋ Your hold" : "● Reserved"}
+      </div>
     );
   }
   if (item.sell_mode === "buy_now") {
@@ -349,16 +390,22 @@ function StatusPill({ item }: { item: Item }) {
 function DetailSheet({
   item,
   sale,
+  days,
+  myHold,
   onClose,
   onReserved,
 }: {
   item: Item;
   sale: Sale;
+  days: SaleDay[];
+  /** This buyer's own hold on the item (placed from this device). */
+  myHold: MyHold | null;
   onClose: () => void;
-  onReserved: (item: Item) => void;
+  onReserved: (item: Item, hold: MyHold) => void;
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [photoIdx, setPhotoIdx] = useState(0);
@@ -397,6 +444,7 @@ function DetailSheet({
         const info = JSON.parse(saved);
         setName(info.name || "");
         setPhone(info.phone || "");
+        setEmail(info.email || "");
       }
     } catch {}
   }, []);
@@ -439,6 +487,7 @@ function DetailSheet({
       p_item_id: item.id,
       p_name: name.trim(),
       p_phone: phone.trim(),
+      p_email: email.trim() || null,
     });
     setLoading(false);
     if (rpcErr) {
@@ -449,7 +498,8 @@ function DetailSheet({
       setError(data?.error || "Couldn't reserve this item.");
       return;
     }
-    // let the seller know by email (fire and forget)
+    // let the seller know by email, and email the buyer a confirmation if
+    // they gave an address (fire and forget)
     fetch("/api/alerts/hold", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -457,13 +507,16 @@ function DetailSheet({
       keepalive: true,
     }).catch(() => {});
     try {
-      localStorage.setItem("garage-sale-my-info", JSON.stringify({ name: name.trim(), phone: phone.trim() }));
+      localStorage.setItem(
+        "garage-sale-my-info",
+        JSON.stringify({ name: name.trim(), phone: phone.trim(), email: email.trim() })
+      );
     } catch {}
-    onReserved({
-      ...item,
-      status: "reserved",
-      reserved_at: new Date().toISOString(),
-    });
+    const reservedAt: string = data.reserved_at || new Date().toISOString();
+    onReserved(
+      { ...item, status: "reserved", reserved_at: reservedAt },
+      { itemId: item.id, saleId: sale.id, reservedAt, name: name.trim(), email: email.trim() || undefined }
+    );
   }
 
   return (
@@ -545,9 +598,12 @@ function DetailSheet({
               ? "This is a bulk item sold in person — no reservations. Just come by and grab one while they last."
               : "First come, first served — no holds or online payment. Come by the sale to buy it."}
           </div>
+        ) : item.status === "reserved" && myHold ? (
+          <HoldConfirmation item={item} sale={sale} days={days} hold={myHold} />
         ) : item.status === "reserved" ? (
           <>
-            <div className="font-mono text-2xl text-amber bg-amber/10 rounded-lg text-center py-3.5 my-2">
+            {/* a live countdown: the server's and the browser's clocks differ by a moment */}
+            <div className="font-mono text-2xl text-amber bg-amber/10 rounded-lg text-center py-3.5 my-2" suppressHydrationWarning>
               {fmtMMSS(reservationDeadline(item, sale) - Date.now())}
             </div>
             <div className="text-xs opacity-60 text-center">
@@ -601,6 +657,19 @@ function DetailSheet({
                     className="w-full px-3 py-2.5 border-2 border-cardboard-dark rounded-lg bg-white"
                   />
                 </div>
+                <div className="mt-2.5">
+                  <label className="block text-xs font-bold opacity-70 mb-1">
+                    Email <span className="font-normal opacity-80">(optional — we&apos;ll send you the pickup details)</span>
+                  </label>
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    type="email"
+                    autoComplete="email"
+                    className="w-full px-3 py-2.5 border-2 border-cardboard-dark rounded-lg bg-white"
+                  />
+                </div>
                 <button
                   onClick={reserve}
                   disabled={loading}
@@ -617,6 +686,40 @@ function DetailSheet({
             )}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** What the buyer sees on an item they're holding: time left, where and when
+ * to pick it up, and what to say to the seller. */
+function HoldConfirmation({ item, sale, days, hold }: { item: Item; sale: Sale; days: SaleDay[]; hold: MyHold }) {
+  const deadline = reservationDeadline(item, sale);
+  const until = new Date(deadline).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return (
+    <div className="mt-3 bg-amber/10 border-2 border-amber/40 rounded-xl p-4">
+      <div className="font-bold text-center">✋ You&apos;re holding this!</div>
+      <div className="font-mono text-2xl text-amber text-center my-1.5">{fmtMMSS(deadline - Date.now())}</div>
+      <div className="text-xs text-center opacity-75 mb-3">Held for you until {until}</div>
+      <ul className="text-sm space-y-1.5">
+        {sale.street && (
+          <li>
+            📍{" "}
+            <a href={mapsUrl(formatAddress(sale))} target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+              {formatAddress(sale)}
+            </a>
+          </li>
+        )}
+        {days.map((d) => (
+          <li key={d.id}>🗓️ {formatSaleDay(d)}</li>
+        ))}
+        <li>
+          🙋 Give your name, <strong>{hold.name}</strong>, and pay {money(item.price)} in person.
+        </li>
+        {hold.email && <li className="opacity-75">📧 We sent these details to {hold.email}.</li>}
+      </ul>
+      <div className="text-xs opacity-60 mt-3">
+        If you don&apos;t pick it up by {until}, the hold ends and it goes back on sale.
       </div>
     </div>
   );
