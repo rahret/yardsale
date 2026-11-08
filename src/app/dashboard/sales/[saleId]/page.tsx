@@ -4,6 +4,7 @@ import { accessFor } from "@/lib/billing";
 import { snapAiEnabled } from "@/lib/snapListServer";
 import SaleAdmin from "@/components/SaleAdmin";
 import { ITEM_SELECT } from "@/lib/utils";
+import { SELLER_ORDER_STATUSES } from "@/lib/liveUpdates";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,7 @@ export default async function SaleAdminPage({
     .from("orders")
     .select("*")
     .eq("sale_id", sale.id)
-    .in("status", ["paid", "picked_up", "refunded", "conflict"])
+    .in("status", SELLER_ORDER_STATUSES)
     .order("created_at", { ascending: false });
 
   // the seller's other sales, for "move unsold items"

@@ -117,4 +117,48 @@ begin
 end;
 $$;
 reset role;
+
+-- ---- a buyer's one hold per sale doesn't follow them into a copy -----------------
+-- (the limit is per sale; a copy is a new sale, and moved items join the new sale)
+insert into public.sales (id, owner_id, slug, status) values
+  ('e4000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000e1', 'holds-1', 'live');
+insert into public.items (id, sale_id, name, sell_mode) values
+  ('e4100000-0000-0000-0000-000000000001', 'e4000000-0000-0000-0000-000000000001', 'chair', 'hold'),
+  ('e4100000-0000-0000-0000-000000000002', 'e4000000-0000-0000-0000-000000000001', 'lamp', 'hold'),
+  ('e4100000-0000-0000-0000-000000000003', 'e4000000-0000-0000-0000-000000000001', 'rug', 'hold');
+set role anon;
+do $$
+begin
+  assert (public.reserve_item('e4100000-0000-0000-0000-000000000001', 'Buyer One', '312-555-0101') ->> 'success')::boolean,
+    'buyer holds an item on sale 1';
+  assert not (public.reserve_item('e4100000-0000-0000-0000-000000000002', 'Buyer One', '312-555-0101') ->> 'success')::boolean,
+    'one hold per person on sale 1';
+end;
+$$;
+reset role;
+set test.uid = '00000000-0000-0000-0000-0000000000e1';
+set role authenticated;
+select public.copy_sale('e4000000-0000-0000-0000-000000000001', 'Holds 2', 'holds-2', 'unsold') as copied_sale \gset
+update public.sales set status = 'live' where id = :'copied_sale';
+insert into public.sales (id, owner_id, slug, status) values
+  ('e4000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-0000000000e1', 'holds-3', 'live');
+select public.move_unsold_items('e4000000-0000-0000-0000-000000000001', 'e4000000-0000-0000-0000-000000000003') as moved \gset
+reset role;
+set role anon;
+select set_config('test.copied_sale', :'copied_sale', false);
+do $$
+declare
+  v_copy uuid := current_setting('test.copied_sale')::uuid;
+begin
+  assert (public.reserve_item((select id from public.items where sale_id = v_copy and name = 'lamp'), 'Buyer One', '312-555-0101')
+          ->> 'success')::boolean,
+    'the same buyer can hold an item on the copied sale';
+  assert (public.reserve_item('e4100000-0000-0000-0000-000000000003', 'Buyer One', '312-555-0101') ->> 'success')::boolean,
+    'and on a moved item in another sale';
+end;
+$$;
+reset role;
+-- release these holds so later tests start with none
+update public.items set status = 'available', reserved_at = null
+where status = 'reserved' and sale_id in (select id from public.sales where owner_id = '00000000-0000-0000-0000-0000000000e1');
 \echo 'copy.test.sql: all checks passed'

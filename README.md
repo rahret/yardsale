@@ -394,6 +394,20 @@ sales. Nothing is deleted; Unarchive, or making the sale live again, restores it
 be deleted, which keeps Buy Now order records and printed QR codes intact. Archived sales
 still count toward the trial's one sale.
 
+## Live updates for sellers
+
+The seller's sale page listens for changes to that sale's items, holds and orders with
+Supabase Realtime (`src/components/useSaleLive.ts`). When a buyer places a hold or pays with
+Buy Now, the list updates, the item is highlighted and a pop-up says what happened. A dot under
+the sale name shows **Live**, or **Checking every 15 seconds** if Realtime can't connect (the
+page then polls). Even when live it re-checks once a minute, and whenever the page comes back
+into view. The **✋ Holds & 💳 Buy Now orders** card lists active holds (buyer, phone, time
+left, Mark sold / Cancel hold) above the online orders; expired holds are released when the
+page refreshes.
+
+`supabase/schema.sql` adds `items`, `item_holds` and `orders` to the `supabase_realtime`
+publication; Realtime still applies RLS, so sellers only receive their own sales' changes.
+
 ## Photos
 
 Photos are scaled in the browser to at most 1,600 px on the long side and saved as JPEG before

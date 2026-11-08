@@ -1,51 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
 import type { Order, Sale } from "@/lib/types";
 import { MIN_CHARGE_CENTS, sellerNetCents, toCents } from "@/lib/fees";
 import { money } from "@/lib/utils";
 
-const ORDER_STATUSES = ["paid", "picked_up", "refunded", "conflict"];
 
 /** Seller-side Buy Now: setup status, what fees mean, and the list of online
  * orders with "Picked up" and "Refund". (Each item chooses Buy Now or Hold.) */
 export default function BuyNowCard({
   sale,
   payoutsReady,
-  hasBuyNowItems,
-  initialOrders,
+  orders,
+  onOrderUpdated,
   onItemsChanged,
 }: {
   sale: Pick<Sale, "id">;
   payoutsReady: boolean;
-  /** Any item on this sale is set to Buy Now (so orders may arrive). */
-  hasBuyNowItems: boolean;
-  initialOrders: Order[];
+  /** The sale's online orders, kept up to date by the sale page (live updates). */
+  orders: Order[];
+  /** An order was marked picked up or refunded here. */
+  onOrderUpdated: (order: Order) => void;
   /** An order changed an item (refund puts it back on sale). */
   onItemsChanged: () => void;
 }) {
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmRefundId, setConfirmRefundId] = useState<string | null>(null);
   const [error, setError] = useState("");
-
-  // new online orders arrive while the seller has this page open
-  useEffect(() => {
-    if (!hasBuyNowItems && orders.length === 0) return;
-    const supabase = createClient();
-    const load = async () => {
-      const { data } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("sale_id", sale.id)
-        .in("status", ORDER_STATUSES)
-        .order("created_at", { ascending: false });
-      if (data) setOrders(data as Order[]);
-    };
-    const t = setInterval(load, 20_000);
-    return () => clearInterval(t);
-  }, [sale.id, hasBuyNowItems, orders.length]);
 
   async function act(order: Order, action: "pickup" | "refund") {
     setBusyId(order.id);
@@ -58,7 +39,7 @@ export default function BuyNowCard({
       setError(data.error || "Something went wrong — try again.");
       return;
     }
-    setOrders((prev) => prev.map((o) => (o.id === order.id ? data.order : o)));
+    onOrderUpdated(data.order);
     if (action === "refund") onItemsChanged();
   }
 
