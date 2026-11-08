@@ -16,6 +16,7 @@ import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
 import NextSaleCard, { type OtherSale } from "@/components/NextSaleCard";
 import { removeUnusedPhotoFiles } from "@/lib/photoFiles";
 import { useSaleLive } from "@/components/useSaleLive";
+import ActiveHolds from "@/components/ActiveHolds";
 import { SELLER_ORDER_STATUSES, newHolds, newPaidOrders } from "@/lib/liveUpdates";
 import { HOUR_OPTIONS, toHour } from "@/lib/hours";
 import { normalizeAddress, addressFormatError } from "@/lib/address";
@@ -587,6 +588,8 @@ export default function SaleAdmin({
   // tell the seller about new holds and Buy Now orders
   async function liveRefresh() {
     const supabase = createClient();
+    // release holds whose time ran out, so the list shows what's really held
+    await supabase.rpc("sweep_expired_reservations", { p_sale_id: sale.id });
     const [{ data: nextItems }, { data: nextOrders }] = await Promise.all([
       supabase.from("items").select(ITEM_SELECT).eq("sale_id", sale.id).order("created_at", { ascending: false }),
       supabase
@@ -793,7 +796,7 @@ export default function SaleAdmin({
       </Card>
 
       {/* online payments */}
-      <Card title="💳 Buy Now (online payments)" id="orders">
+      <Card title="✋ Holds & 💳 Buy Now orders" id="orders">
         {!premium && (
           <div className="mb-3">
             <UpgradeNote>
@@ -801,6 +804,15 @@ export default function SaleAdmin({
             </UpgradeNote>
           </div>
         )}
+        <ActiveHolds
+          items={items}
+          sale={sale}
+          onMarkSold={(item) => setSaleModal({ item, mode: "sell" })}
+          onCancel={cancelReservation}
+          onExpired={liveRefresh}
+        />
+        <div className="border-t border-cardboard-dark/30 my-4" />
+        <div className="text-xs font-bold opacity-70 mb-1.5">💳 Buy Now (online payments)</div>
         <BuyNowCard
           sale={sale}
           payoutsReady={payoutsReady}

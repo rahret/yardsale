@@ -23,3 +23,15 @@ export type LiveMode = "connecting" | "live" | "polling";
 
 /** How often to check when live updates can't connect (and the page is visible). */
 export const FALLBACK_POLL_MS = 15_000;
+/** A slower check while connected, in case live updates miss something. */
+export const SAFETY_POLL_MS = 60_000;
+
+/** "12 min left", "1 hr 5 min left", or "Time's up" for a hold's deadline. */
+export function holdTimeLeft(deadlineMs: number, nowMs: number): string {
+  const mins = Math.ceil((deadlineMs - nowMs) / 60_000);
+  if (mins <= 0) return "Time's up";
+  if (mins < 60) return `${mins} min left`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h} hr ${m} min left` : `${h} hr left`;
+}

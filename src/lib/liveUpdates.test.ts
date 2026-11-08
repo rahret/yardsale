@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Item, Order } from "@/lib/types";
-import { newHolds, newPaidOrders } from "./liveUpdates";
+import { holdTimeLeft, newHolds, newPaidOrders } from "./liveUpdates";
 
 const item = (id: string, status: Item["status"]) => ({ id, status }) as Item;
 const order = (id: string, status: Order["status"]) => ({ id, status }) as Order;
@@ -27,5 +27,19 @@ describe("newPaidOrders", () => {
 
   it("doesn't repeat an order that was already listed", () => {
     expect(newPaidOrders([order("a", "conflict")], [order("a", "paid")])).toEqual([]);
+  });
+});
+
+describe("holdTimeLeft", () => {
+  const now = 1_000_000_000;
+  it.each([
+    [12 * 60_000, "12 min left"],
+    [30_000, "1 min left"],
+    [65 * 60_000, "1 hr 5 min left"],
+    [120 * 60_000, "2 hr left"],
+    [0, "Time's up"],
+    [-60_000, "Time's up"],
+  ])("%s ms → %s", (ms, out) => {
+    expect(holdTimeLeft(now + ms, now)).toBe(out);
   });
 });

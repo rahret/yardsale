@@ -400,7 +400,10 @@ The seller's sale page listens for changes to that sale's items, holds and order
 Supabase Realtime (`src/components/useSaleLive.ts`). When a buyer places a hold or pays with
 Buy Now, the list updates, the item is highlighted and a pop-up says what happened. A dot under
 the sale name shows **Live**, or **Checking every 15 seconds** if Realtime can't connect (the
-page then polls), and the page always re-checks when it comes back into view.
+page then polls). Even when live it re-checks once a minute, and whenever the page comes back
+into view. The **✋ Holds & 💳 Buy Now orders** card lists active holds (buyer, phone, time
+left, Mark sold / Cancel hold) above the online orders; expired holds are released when the
+page refreshes.
 
 `supabase/schema.sql` adds `items`, `item_holds` and `orders` to the `supabase_realtime`
 publication; Realtime still applies RLS, so sellers only receive their own sales' changes.

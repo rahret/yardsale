@@ -214,6 +214,8 @@ _Last updated: 2026-11-01_
   (Supabase Realtime): new holds and Buy Now purchases appear right away with a pop-up alert
   and a highlight, and a "Live" dot shows it's connected. Falls back to checking every 15
   seconds if live updates can't connect, and checks whenever the page comes back into view.
+  The Buy Now card is now **Holds & Buy Now orders**, with a live list of active holds (buyer,
+  phone, time left, Mark sold / Cancel hold).
 - ✅ Item photos are stored at full phone size; shrinking them on upload would speed up the
   buyer page and save storage. _Shipped in #30:_ scaled to 1,600 px JPEG in the
   browser before upload (also strips the photo's GPS location).
