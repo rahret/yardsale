@@ -369,11 +369,25 @@ Label positions are kept in inches in `src/lib/printSheets.ts` and drawn as perc
 Letter page printed with no margins, so the preview is the printout. Print at 100% scale with
 margins set to none, and test a sheet on plain paper against the labels first.
 
+## Next sale: copy a sale or move unsold items
+
+The **♻️ Next sale** card at the bottom of a sale page:
+
+- **Copy to a new sale** (`copy_sale` in `supabase/schema.sql`) makes a new draft with the
+  sale's details (name, address and map position, tagline, payment methods) and its unsold
+  items, all items, or none. Dates, the note to buyers, holds, sales and visit counts aren't
+  copied; items start available, and a bulk lot brings only what's left when copying unsold
+  items. Copied items point at the same photo files, so the app only deletes a photo file
+  once no item uses it (`src/lib/photoFiles.ts`). Needs Pro or the Sale Pass.
+- **Move unsold items** (`move_unsold_items`) moves every unsold item not on hold into another
+  of the seller's sales. A part-sold bulk lot is split so the sold units and their revenue stay
+  with the old sale.
+
 ## Photos
 
 Photos are scaled in the browser to at most 1,600 px on the long side and saved as JPEG before
 upload (`src/lib/shrinkImage.ts`), which also applies the camera's rotation and removes EXIF data
-such as the GPS location. Deleting an item removes its photo files from storage.
+such as the GPS location. Deleting an item removes its photo files from storage (unless a copied item still uses them).
 
 ## Notes / things to customize
 

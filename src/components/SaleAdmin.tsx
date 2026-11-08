@@ -13,6 +13,8 @@ import SnapList from "@/components/SnapList";
 import SellModePicker, { SELL_MODE_LABELS, sellModeError } from "@/components/SellModePicker";
 import BuyNowCard from "@/components/BuyNowCard";
 import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
+import NextSaleCard, { type OtherSale } from "@/components/NextSaleCard";
+import { removeUnusedPhotoFiles } from "@/lib/photoFiles";
 import { HOUR_OPTIONS, toHour } from "@/lib/hours";
 import { normalizeAddress, addressFormatError } from "@/lib/address";
 import { ADDRESS_NOT_FOUND, checkAddress, sameAddress } from "@/lib/addressCheck";
@@ -64,6 +66,7 @@ export default function SaleAdmin({
   justCreated = false,
   access = "full",
   snapAi = false,
+  otherSales = [],
 }: {
   sale: Sale;
   initialItems: Item[];
@@ -80,6 +83,8 @@ export default function SaleAdmin({
   access?: Access;
   /** Snap & list suggests listings with AI (otherwise the seller fills them in). */
   snapAi?: boolean;
+  /** The seller's other sales, for moving unsold items. */
+  otherSales?: OtherSale[];
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
@@ -550,8 +555,9 @@ export default function SaleAdmin({
     const paths = (items.find((i) => i.id === id)?.item_photos || []).map((p) => p.storage_path);
     const { error } = await supabase.from("items").delete().eq("id", id);
     if (!error) {
-      // the database rows go with the item; the photo files have to be removed too
-      if (paths.length) supabase.storage.from("item-photos").remove(paths).then(() => {});
+      // the database rows go with the item; the photo files have to be removed
+      // too, unless a copied item in another sale still uses them
+      removeUnusedPhotoFiles(supabase, paths).catch(() => {});
       setItems((prev) => prev.filter((i) => i.id !== id));
       setConfirmDeleteId(null);
     }
@@ -638,6 +644,11 @@ export default function SaleAdmin({
         <div className="text-xs opacity-60 mt-2">
           {STATUS_OPTIONS.find((o) => o.value === sale.status)?.hint}
         </div>
+        {sale.status === "ended" && (
+          <a href="#next-sale" className="inline-block text-xs font-bold underline mt-2">
+            Holding another sale? Start it from this one ↓
+          </a>
+        )}
       </Card>
 
       {/* note to buyers */}
@@ -1316,6 +1327,10 @@ export default function SaleAdmin({
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card title="♻️ Next sale" id="next-sale">
+        <NextSaleCard sale={sale} items={items} otherSales={otherSales} access={access} onItemsMoved={reloadItems} />
       </Card>
 
       {saleModal && (
