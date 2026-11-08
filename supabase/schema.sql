@@ -726,6 +726,146 @@ $$;
 grant execute on function public.log_sale_visit(uuid, text, uuid) to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
+-- item_views: a buyer opened an item on the sale page (once per item per
+-- browser session; opening an item from a shared ?item= link is already
+-- counted in sale_visits.item_id). Feeds "most viewed items" in the seller's
+-- stats. No personal data; the seller's own views are skipped.
+-- ----------------------------------------------------------------------------
+create table if not exists public.item_views (
+  id bigint generated always as identity primary key,
+  sale_id uuid not null references public.sales (id) on delete cascade,
+  item_id uuid not null references public.items (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists item_views_sale_item_idx on public.item_views (sale_id, item_id);
+
+alter table public.item_views enable row level security;
+
+drop policy if exists "Owners can view item views on their own sales" on public.item_views;
+create policy "Owners can view item views on their own sales"
+  on public.item_views for select
+  using (exists (select 1 from public.sales s where s.id = item_views.sale_id and s.owner_id = auth.uid()));
+
+create or replace function public.log_item_view(p_item_id uuid)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.item_views (sale_id, item_id)
+  select i.sale_id, i.id
+  from public.items i
+  join public.sales s on s.id = i.sale_id
+  where i.id = p_item_id
+    and s.status <> 'draft'
+    and s.owner_id is distinct from auth.uid();
+end;
+$$;
+
+grant execute on function public.log_item_view(uuid) to anon, authenticated;
+
+-- ----------------------------------------------------------------------------
+-- sale_stats: the seller's stats page for one sale, as JSON. Only the sale's
+-- owner can read it. The full breakdown is part of Pro and the Sale Pass; on
+-- other plans it returns the headline numbers only, with locked = true.
+-- Days are in the sale's time zone. The daily series runs from the first day
+-- with any activity (at most 30 days back) to today, with zeros filled in.
+-- ----------------------------------------------------------------------------
+create or replace function public.sale_stats(p_sale_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer set search_path = public
+as $$
+declare
+  v_sale public.sales%rowtype;
+  v_tz text;
+  v_today date;
+  v_start date;
+  v_visits bigint;
+  v_item_views bigint;
+  v_result jsonb;
+begin
+  select * into v_sale from public.sales where id = p_sale_id and owner_id = auth.uid();
+  if not found then
+    raise exception 'Sale not found.' using errcode = 'P0001';
+  end if;
+  v_tz := coalesce(nullif(v_sale.timezone, ''), 'America/Chicago');
+  v_today := (now() at time zone v_tz)::date;
+
+  select count(*) into v_visits from public.sale_visits where sale_id = p_sale_id;
+  select count(*) into v_item_views from public.item_views where sale_id = p_sale_id;
+
+  v_result := jsonb_build_object(
+    'locked', public.seller_access(v_sale.owner_id) <> 'full',
+    'timezone', v_tz,
+    'visits', v_visits,
+    'item_views', v_item_views + (select count(*) from public.sale_visits where sale_id = p_sale_id and item_id is not null),
+    'holds', (select count(*) from public.reservation_log where sale_id = p_sale_id),
+    'orders', (select count(*) from public.orders where sale_id = p_sale_id and status in ('paid', 'picked_up')),
+    'online_cents', (select coalesce(sum(amount_cents - fee_cents), 0) from public.orders
+                     where sale_id = p_sale_id and status in ('paid', 'picked_up')),
+    'revenue', (select coalesce(sum(revenue), 0) from public.items where sale_id = p_sale_id),
+    'items', (select count(*) from public.items where sale_id = p_sale_id),
+    'items_sold', (select count(*) from public.items where sale_id = p_sale_id and status = 'sold')
+  );
+  if (v_result ->> 'locked')::boolean then
+    return v_result;
+  end if;
+
+  select greatest(
+           coalesce(least(
+             (select min((created_at at time zone v_tz)::date) from public.sale_visits where sale_id = p_sale_id),
+             (select min((created_at at time zone v_tz)::date) from public.reservation_log where sale_id = p_sale_id),
+             (select min((paid_at at time zone v_tz)::date) from public.orders where sale_id = p_sale_id and paid_at is not null)
+           ), v_today - 6),
+           v_today - 29)
+    into v_start;
+  v_start := least(v_start, v_today - 6); -- always show at least a week
+
+  return v_result || jsonb_build_object(
+    'days', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'day', d.day,
+        'visits', (select count(*) from public.sale_visits v
+                   where v.sale_id = p_sale_id and (v.created_at at time zone v_tz)::date = d.day),
+        'holds', (select count(*) from public.reservation_log r
+                  where r.sale_id = p_sale_id and (r.created_at at time zone v_tz)::date = d.day),
+        'orders', (select count(*) from public.orders o
+                   where o.sale_id = p_sale_id and o.status in ('paid', 'picked_up')
+                     and (o.paid_at at time zone v_tz)::date = d.day)
+      ) order by d.day), '[]'::jsonb)
+      from (select generate_series(v_start, v_today, interval '1 day')::date as day) d
+    ),
+    'sources', (
+      select coalesce(jsonb_agg(jsonb_build_object('src', src, 'visits', n) order by n desc, src), '[]'::jsonb)
+      from (select src, count(*) as n from public.sale_visits where sale_id = p_sale_id group by src) t
+    ),
+    'top_items', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'id', i.id, 'name', i.name, 'status', i.status, 'price', i.price, 'views', t.n
+      ) order by t.n desc, i.name), '[]'::jsonb)
+      from (
+        select item_id, count(*) as n
+        from (
+          select item_id from public.item_views where sale_id = p_sale_id
+          union all
+          select item_id from public.sale_visits where sale_id = p_sale_id and item_id is not null
+        ) u
+        group by item_id
+        order by count(*) desc
+        limit 10
+      ) t
+      join public.items i on i.id = t.item_id
+    )
+  );
+end;
+$$;
+
+grant execute on function public.sale_stats(uuid) to authenticated;
+
+-- ----------------------------------------------------------------------------
 -- search_sales: the "Find yard sales" directory. Returns one page of listed,
 -- live sales that have a sale day in [p_from, p_to], optionally within
 -- p_radius_miles of (p_lat, p_lng), matching every word of p_query (name,

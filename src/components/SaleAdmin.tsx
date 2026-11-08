@@ -716,6 +716,9 @@ export default function SaleAdmin({
         <Stat num={stats.sold} label="Sold" />
         <Stat num={money(stats.revenue)} label="Revenue" />
       </div>
+      <a href={`/dashboard/sales/${sale.id}/stats`} className="inline-block text-xs font-bold underline -mt-3 mb-5">
+        📊 See all stats — visits, where buyers came from, most viewed items
+      </a>
 
       {/* status */}
       <Card title="🚦 Sale status" id="status">
