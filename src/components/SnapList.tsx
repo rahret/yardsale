@@ -4,7 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { shrinkImage } from "@/lib/shrinkImage";
 import { photoUrl } from "@/components/PhotoUploader";
-import { COMMON_CATEGORIES, PRICE_PRESETS, PRICE_STEPS, nudgePrice, type SnapSuggestion } from "@/lib/snapList";
+import {
+  COMMON_CATEGORIES,
+  PRICE_PRESETS,
+  PRICE_STEPS,
+  groupNumbers,
+  listingsFromPhotos,
+  nudgePrice,
+  type SnapSuggestion,
+} from "@/lib/snapList";
 import { ITEM_SELECT, friendlyDbError, money } from "@/lib/utils";
 import type { Item, SellMode } from "@/lib/types";
 import SellModePicker, { sellModeError } from "@/components/SellModePicker";
@@ -18,10 +26,10 @@ type Status = "uploading" | "thinking" | "ready" | "error" | "adding";
 interface Draft {
   id: string;
   status: Status;
-  /** Storage path once uploaded (in the sale's own folder). */
-  path?: string;
-  /** A local preview while uploading. */
-  preview?: string;
+  /** Storage paths once uploaded (in the sale's own folder), first = cover. */
+  paths: string[];
+  /** Local previews while uploading. */
+  previews?: string[];
   error?: string;
   name: string;
   price: string;
@@ -42,9 +50,23 @@ const ISSUE_NOTES: Record<string, string> = {
   not_an_item: "We couldn't see an item to sell in this photo.",
 };
 
-/** Snap & list: take or pick photos; each is uploaded, Claude suggests a
- * listing, and the seller reviews (adjusting the price with quick buttons)
- * before adding. Drafts are kept on this device until added or discarded. */
+/** A photo in the sorting grid, before it becomes part of a card. */
+interface Staged {
+  id: string;
+  file: File;
+  preview: string;
+  /** Photos with the same group become one listing. */
+  group: string | null;
+}
+
+/** Colours for group badges in the sorting grid. */
+const GROUP_COLORS = ["#2f7d32", "#c8102e", "#0b4fa8", "#b26a00", "#6a1b9a", "#00796b", "#ad1457", "#455a64"];
+
+/** Snap & list: take or pick photos, sort them in a grid (group several
+ * photos of one item, remove extras), then each group or single photo becomes
+ * a card: uploaded, optionally given a Claude suggestion, and reviewed
+ * (adjusting the price with quick buttons) before adding. Cards are kept on
+ * this device until added or discarded. */
 export default function SnapList({
   saleId,
   itemCount,
@@ -72,7 +94,10 @@ export default function SnapList({
   const storageKey = `snap:${saleId}`;
   const [drafts, setDrafts] = useState<Draft[]>([]);
   // photos waiting their turn, worked through a few at a time
-  const queue = useRef<{ id: string; file: File }[]>([]);
+  const queue = useRef<{ id: string; files: File[] }[]>([]);
+  // the sorting grid
+  const [staged, setStaged] = useState<Staged[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   // new cards start with the "how buyers get it" the seller last picked
   const lastMode = useRef<SellMode>("in_person");
   const running = useRef(0);
@@ -87,7 +112,9 @@ export default function SnapList({
       const saved = JSON.parse(localStorage.getItem(storageKey) || "[]") as Draft[];
       if (Array.isArray(saved)) {
         const restored = saved
-          .filter((d) => d.path && d.status === "ready")
+          // cards saved before photo groups had a single `path`
+          .map((d) => ({ ...d, paths: d.paths ?? ((d as { path?: string }).path ? [(d as { path?: string }).path!] : []) }))
+          .filter((d) => d.paths.length > 0 && d.status === "ready")
           .map((d) => ({ ...d, isBulk: d.isBulk ?? d.quantity > 1, sellMode: d.sellMode ?? "in_person" }));
         setDrafts((ds) => [...restored.filter((r) => !ds.some((d) => d.id === r.id)), ...ds]);
       }
@@ -97,24 +124,66 @@ export default function SnapList({
   useEffect(() => {
     if (!loaded) return;
     try {
-      const keep = drafts.filter((d) => d.status === "ready").map(({ preview: _p, ...d }) => d);
+      const keep = drafts.filter((d) => d.status === "ready").map(({ previews: _p, ...d }) => d);
       localStorage.setItem(storageKey, JSON.stringify(keep));
     } catch {}
   }, [drafts, storageKey, loaded]);
 
   const patch = (id: string, p: Partial<Draft>) => setDrafts((ds) => ds.map((d) => (d.id === id ? { ...d, ...p } : d)));
 
+  // new photos go into the sorting grid first
   function addFiles(list: FileList | null) {
     if (!list?.length) return;
     const added = Array.from(list)
       .filter((f) => f.type.startsWith("image/"))
-      .map((file) => ({ id: crypto.randomUUID(), file }));
+      .map((file) => ({ id: crypto.randomUUID(), file, preview: URL.createObjectURL(file), group: null }));
+    setStaged((st) => [...st, ...added]);
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((sel) => {
+      const next = new Set(sel);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function groupSelected() {
+    const group = crypto.randomUUID();
+    setStaged((st) => st.map((p) => (selected.has(p.id) ? { ...p, group } : p)));
+    setSelected(new Set());
+  }
+
+  function ungroupSelected() {
+    setStaged((st) => st.map((p) => (selected.has(p.id) ? { ...p, group: null } : p)));
+    setSelected(new Set());
+  }
+
+  function removeSelected() {
+    setStaged((st) => {
+      st.filter((p) => selected.has(p.id)).forEach((p) => URL.revokeObjectURL(p.preview));
+      return st.filter((p) => !selected.has(p.id));
+    });
+    setSelected(new Set());
+  }
+
+  function cancelSorting() {
+    staged.forEach((p) => URL.revokeObjectURL(p.preview));
+    setStaged([]);
+    setSelected(new Set());
+  }
+
+  /** Each group (and each photo on its own) becomes one card. */
+  function finishSorting() {
+    const units = listingsFromPhotos(staged);
     setDrafts((ds) => [
       ...ds,
-      ...added.map(({ id, file }) => ({
-        id,
+      ...units.map((photos) => ({
+        id: photos[0].id,
         status: "uploading" as Status,
-        preview: URL.createObjectURL(file),
+        paths: [],
+        previews: photos.map((p) => p.preview),
         name: "",
         price: "",
         category: "",
@@ -124,7 +193,9 @@ export default function SnapList({
         sellMode: lastMode.current,
       })),
     ]);
-    queue.current.push(...added);
+    queue.current.push(...units.map((photos) => ({ id: photos[0].id, files: photos.map((p) => p.file) })));
+    setStaged([]);
+    setSelected(new Set());
     pump();
   }
 
@@ -132,27 +203,32 @@ export default function SnapList({
     while (running.current < PARALLEL && queue.current.length > 0) {
       const next = queue.current.shift()!;
       running.current++;
-      process(next.id, next.file).finally(() => {
+      process(next.id, next.files).finally(() => {
         running.current--;
         pump();
       });
     }
   }
 
-  async function process(id: string, original: File) {
+  async function process(id: string, originals: File[]) {
+    const paths: string[] = [];
     try {
-      const file = await shrinkImage(original);
-      const path = `${saleId}/snap/${crypto.randomUUID()}.jpg`;
-      const { error } = await createClient().storage.from(BUCKET).upload(path, file, {
-        contentType: file.type,
-        cacheControl: "3600",
-      });
-      if (error) return patch(id, { status: "error", error: friendlyDbError(error.message) });
-      if (!ai) return patch(id, { path, status: "ready" });
-      patch(id, { path, status: "thinking" });
-      await suggest(id, path);
+      for (const original of originals) {
+        const file = await shrinkImage(original);
+        const path = `${saleId}/snap/${crypto.randomUUID()}.jpg`;
+        const { error } = await createClient().storage.from(BUCKET).upload(path, file, {
+          contentType: file.type,
+          cacheControl: "3600",
+        });
+        if (error) return patch(id, { paths, status: "error", error: friendlyDbError(error.message) });
+        paths.push(path);
+      }
+      if (!ai) return patch(id, { paths, status: "ready" });
+      patch(id, { paths, status: "thinking" });
+      // the first photo of a group is the one Claude looks at
+      await suggest(id, paths[0]);
     } catch {
-      patch(id, { status: "error", error: "Couldn't upload that photo — check your connection." });
+      patch(id, { paths, status: "error", error: "Couldn't upload a photo — check your connection." });
     }
   }
 
@@ -210,7 +286,11 @@ export default function SnapList({
       .select("id")
       .single();
     if (error || !item) return patch(d.id, { status: "ready", error: friendlyDbError(error?.message) });
-    if (d.path) await supabase.from("item_photos").insert({ item_id: item.id, storage_path: d.path, position: 0 });
+    if (d.paths.length) {
+      await supabase
+        .from("item_photos")
+        .insert(d.paths.map((storage_path, position) => ({ item_id: item.id, storage_path, position })));
+    }
     const { data: full } = await supabase.from("items").select(ITEM_SELECT).eq("id", item.id).single();
     setDrafts((ds) => ds.filter((x) => x.id !== d.id));
     if (full) onAdded(full as Item);
@@ -218,7 +298,7 @@ export default function SnapList({
 
   async function discard(d: Draft) {
     setDrafts((ds) => ds.filter((x) => x.id !== d.id));
-    if (d.path) await createClient().storage.from(BUCKET).remove([d.path]);
+    if (d.paths.length) await createClient().storage.from(BUCKET).remove(d.paths);
   }
 
   async function addAll() {
@@ -240,8 +320,8 @@ export default function SnapList({
           <div className="font-bold text-sm">📸 Snap &amp; list</div>
           <div className="text-xs opacity-70">
             {ai
-              ? "Photograph items one after another — we suggest a name, category and price for each. You check them before they're added."
-              : "Photograph items one after another, then give each a name and price — every photo becomes an item card."}
+              ? "Photograph items, group the photos of each one, and we suggest a name, category and price. You check them before they're added."
+              : "Photograph items, group the photos of each one, then give each a name and price."}
           </div>
         </div>
         <div className="flex gap-2">
@@ -280,6 +360,20 @@ export default function SnapList({
           }}
         />
       </div>
+
+      {staged.length > 0 && (
+        <PhotoSorter
+          staged={staged}
+          selected={selected}
+          room={itemLimit === null ? null : Math.max(0, itemLimit - itemCount - drafts.length)}
+          onToggle={toggleSelected}
+          onGroup={groupSelected}
+          onUngroup={ungroupSelected}
+          onRemove={removeSelected}
+          onCancel={cancelSorting}
+          onDone={finishSorting}
+        />
+      )}
 
       <datalist id="snap-categories">
         {Array.from(new Set([...categories, ...COMMON_CATEGORIES])).map((c) => (
@@ -351,16 +445,22 @@ function DraftCard({
   payoutsReady: boolean;
   premium: boolean;
 }) {
-  const src = d.preview || (d.path ? photoUrl(d.path) : undefined);
+  const src = d.previews?.[0] || (d.paths[0] ? photoUrl(d.paths[0]) : undefined);
+  const photoCount = Math.max(d.paths.length, d.previews?.length ?? 0);
   const working = d.status === "uploading" || d.status === "thinking";
   const input = "w-full px-2 py-1.5 border-2 border-cardboard-dark rounded-lg text-sm";
   const price = Number(d.price) || 0;
 
   return (
     <div className="bg-white border-2 border-cardboard-dark rounded-xl p-2.5 flex gap-3">
-      <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-chalk-dim">
+      <div className="w-20 h-20 shrink-0 rounded-lg overflow-hidden bg-chalk-dim relative">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {src && <img src={src} alt="" className="w-full h-full object-cover" />}
+        {photoCount > 1 && (
+          <span className="absolute bottom-1 right-1 bg-ink/80 text-chalk text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+            📷 {photoCount}
+          </span>
+        )}
       </div>
       <div className="flex-1 min-w-0">
         {working ? (
@@ -472,6 +572,113 @@ function DraftCard({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The sorting step: pick photos of the same item and group them (each group
+ * becomes one listing), remove photos that aren't wanted, then Done. */
+function PhotoSorter({
+  staged,
+  selected,
+  room,
+  onToggle,
+  onGroup,
+  onUngroup,
+  onRemove,
+  onCancel,
+  onDone,
+}: {
+  staged: Staged[];
+  selected: Set<string>;
+  /** Listings still allowed by the plan, or null for no limit. */
+  room: number | null;
+  onToggle: (id: string) => void;
+  onGroup: () => void;
+  onUngroup: () => void;
+  onRemove: () => void;
+  onCancel: () => void;
+  onDone: () => void;
+}) {
+  const numbers = groupNumbers(staged);
+  const listings = listingsFromPhotos(staged).length;
+  const selectedGrouped = staged.some((p) => selected.has(p.id) && p.group);
+  const color = (group: string | null) => (group ? GROUP_COLORS[((numbers.get(group) ?? 1) - 1) % GROUP_COLORS.length] : undefined);
+  const btn = "border-2 border-cardboard-dark bg-white font-bold px-3 py-1.5 rounded-lg text-xs disabled:opacity-40";
+
+  return (
+    <div className="bg-white border-2 border-cardboard-dark rounded-xl p-3 mt-3">
+      <div className="font-bold text-sm">Sort your photos</div>
+      <p className="text-xs opacity-70 mb-2">
+        Tap the photos of one item, then <strong>Group photos</strong>. Each group — and each photo on its own — becomes
+        one listing.
+      </p>
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        {staged.map((p) => {
+          const isSelected = selected.has(p.id);
+          const c = color(p.group);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onToggle(p.id)}
+              aria-pressed={isSelected}
+              aria-label={`Photo${p.group ? `, group ${numbers.get(p.group)}` : ""}${isSelected ? ", selected" : ""}`}
+              className="relative aspect-square rounded-lg overflow-hidden border-4 bg-chalk-dim"
+              style={{ borderColor: c ?? "transparent" }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.preview} alt="" className={`w-full h-full object-cover ${isSelected ? "opacity-70" : ""}`} />
+              {p.group && (
+                <span
+                  className="absolute bottom-1 left-1 text-white text-[11px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: c }}
+                >
+                  Group {numbers.get(p.group)}
+                </span>
+              )}
+              <span
+                className={`absolute top-1 right-1 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-xs font-bold ${
+                  isSelected ? "bg-grass text-white" : "bg-black/30"
+                }`}
+                aria-hidden
+              >
+                {isSelected ? "✓" : ""}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="text-xs font-semibold opacity-70 mt-2" aria-live="polite">
+        {staged.length} photo{staged.length === 1 ? "" : "s"} → {listings} listing{listings === 1 ? "" : "s"}
+        {selected.size > 0 && ` · ${selected.size} selected`}
+      </div>
+      {room !== null && listings > room && (
+        <div className="text-xs font-semibold text-marker mt-1">
+          Your plan has room for {room} more item{room === 1 ? "" : "s"} — group or remove some photos.
+        </div>
+      )}
+
+      <div className="flex gap-2 flex-wrap mt-2">
+        <button type="button" onClick={onGroup} disabled={selected.size < 2} className={btn}>
+          🔗 Group photos
+        </button>
+        <button type="button" onClick={onUngroup} disabled={!selectedGrouped} className={btn}>
+          Ungroup
+        </button>
+        <button type="button" onClick={onRemove} disabled={selected.size === 0} className={btn}>
+          🗑️ Remove
+        </button>
+      </div>
+      <div className="flex gap-2 justify-end mt-3 border-t-2 border-dashed border-cardboard/60 pt-3">
+        <button type="button" onClick={onCancel} className="text-sm font-semibold opacity-70 underline px-2">
+          Cancel
+        </button>
+        <button type="button" onClick={onDone} className="bg-grass text-white font-bold px-4 py-2 rounded-lg text-sm shadow-tag">
+          Done
+        </button>
       </div>
     </div>
   );
