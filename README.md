@@ -385,7 +385,9 @@ The **♻️ Next sale** card at the bottom of a sale page:
 
 ## Archiving a sale
 
-A sale that isn't live can be archived from its status card (`sales.archived_at`). It drops
+A sale that isn't live can be archived from its status card, or from the ⋯ menu on its card
+in the dashboard list (which also has Open sale, View public page and Copy to a new sale, and
+an Undo after archiving) (`sales.archived_at`). It drops
 off the dashboard's list (a "Show archived sales" link brings it back), and its public link
 shows "This sale has ended" with a button to the seller's current live sale, or to Find yard
 sales. Nothing is deleted; Unarchive, or making the sale live again, restores it. Sales can't

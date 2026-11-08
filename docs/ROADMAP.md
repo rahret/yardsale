@@ -130,11 +130,14 @@ _Last updated: 2026-11-01_
     **Move unsold items** to another of your sales: holds stay for their buyer, and a part-sold
     bulk lot moves what's left while what sold stays in the old sale's totals. Copying a sale
     needs Pro or the Sale Pass (the trial has one sale).
-  - _Done (pending merge):_ **🗄️ Archive** a sale that isn't live: hidden from the sales
+  - _Shipped in #37:_ **🗄️ Archive** a sale that isn't live: hidden from the sales
     list ("Show archived sales"), its link tells buyers it's over and points to the seller's
     live sale if there is one. Nothing is deleted; going live again unarchives it. Archived
     sales still count toward the trial's one sale. (Deleting sales was considered and left
     out: it would lose Buy Now order records and break printed QR codes.)
+  - _Done (pending merge):_ a ⋯ menu on each sale in the dashboard list: Open sale, View
+    public page, Copy to a new sale, and Archive (with Undo) / Unarchive. Live sales show
+    Archive greyed out until they're ended.
   - _Still to do:_ multi-family sales.
 - 🟡 **There are no numbers.** Sellers can't see page views, QR scans versus link visits,
   most-viewed items or reservations. That's what proves the app brought them buyers, and it's
