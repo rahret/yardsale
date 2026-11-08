@@ -2,8 +2,9 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { fulfillCheckoutSession } from "@/lib/stripeEvents";
-import { money } from "@/lib/utils";
-import type { Order } from "@/lib/types";
+import { formatAddress, formatSaleDay, mapsUrl, money, sortSaleDays } from "@/lib/utils";
+import { currentDays } from "@/lib/share";
+import type { Order, Sale, SaleDay } from "@/lib/types";
 import AutoRefresh from "@/components/AutoRefresh";
 import SiteHeader from "@/components/SiteHeader";
 import { isSignedIn } from "@/lib/currentUser";
@@ -42,6 +43,18 @@ export default async function OrderPage({
     }
   }
 
+  // where and when to pick it up
+  let sale: Sale | null = null;
+  let days: SaleDay[] = [];
+  if (admin && order) {
+    const [{ data: s }, { data: d }] = await Promise.all([
+      admin.from("sales").select("*").eq("id", order.sale_id).maybeSingle(),
+      admin.from("sale_days").select("*").eq("sale_id", order.sale_id),
+    ]);
+    sale = (s as Sale) || null;
+    days = sale ? currentDays(sale, sortSaleDays((d || []) as SaleDay[])) : [];
+  }
+
   const back = (
     <Link href={`/s/${params.slug}`} className="inline-block mt-6 text-grass-dark font-semibold underline text-sm">
       ← Back to the sale
@@ -70,8 +83,31 @@ export default async function OrderPage({
                 <div className="text-[11px] uppercase tracking-wide font-bold opacity-60">Pickup code</div>
                 <div className="font-mono text-5xl font-bold tracking-[0.2em]">{order.pickup_code}</div>
               </div>
-              <p className="text-sm opacity-75">
-                Show this code to the seller when you pick it up at the sale. It&apos;s also on your emailed receipt.
+              <p className="text-sm opacity-75">Show this code to the seller when you pick it up at the sale.</p>
+              {sale && (sale.street || days.length > 0) && (
+                <ul className="text-sm text-left bg-chalk rounded-lg px-4 py-3 mt-4 space-y-1.5">
+                  {sale.street && (
+                    <li>
+                      📍{" "}
+                      <a
+                        href={mapsUrl(formatAddress(sale))}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline font-semibold"
+                      >
+                        {formatAddress(sale)}
+                      </a>
+                    </li>
+                  )}
+                  {days.map((d) => (
+                    <li key={d.id}>🗓️ {formatSaleDay(d)}</li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs opacity-60 mt-3">
+                {order.buyer_email
+                  ? `Your code and these details are on their way to ${order.buyer_email}. A screenshot of this page works too.`
+                  : "Take a screenshot of this page so you have your code at pickup."}
               </p>
               {back}
             </>

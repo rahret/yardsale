@@ -408,6 +408,18 @@ page refreshes.
 `supabase/schema.sql` adds `items`, `item_holds` and `orders` to the `supabase_realtime`
 publication; Realtime still applies RLS, so sellers only receive their own sales' changes.
 
+## What buyers get
+
+- **Holds:** the item shows **✋ You're holding this!** with a countdown, the time it's held
+  until, the sale's address (map link) and hours, and the name to give at pickup. The page
+  remembers the hold on that device (`src/lib/myHolds.ts`), so coming back shows a "You're
+  holding …" banner and a **Your hold** label. The hold form has an optional email: if given,
+  the buyer is emailed the same details (`notifyBuyerHoldPlaced`).
+- **Buy Now:** the confirmation page shows the pickup code plus the sale's address and hours,
+  and the buyer is emailed their code, address and hours (`notifyBuyerOrderPaid`, using the
+  email Stripe Checkout collects). Each email is sent once, through ZeptoMail like the seller
+  alerts. No text messages yet.
+
 ## Photos
 
 Photos are scaled in the browser to at most 1,600 px on the long side and saved as JPEG before

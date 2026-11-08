@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { syncConnectAccount } from "./payouts";
 import { applyBillingCheckout, syncSubscription } from "./billingServer";
-import { notifyOrderPaid } from "./alerts";
+import { notifyBuyerOrderPaid, notifyOrderPaid } from "./alerts";
 
 /** Refunds a paid order through Stripe, pulling the money back from the
  * seller's transfer and returning the application fee, then records it. */
@@ -52,7 +52,7 @@ export async function fulfillCheckoutSession(
     return "refunded (item already gone)";
   }
   // tell the seller to set it aside (sent once, however often this runs)
-  if (result === "paid") await notifyOrderPaid(admin, orderId);
+  if (result === "paid") await Promise.all([notifyOrderPaid(admin, orderId), notifyBuyerOrderPaid(admin, orderId)]);
   return String(result);
 }
 

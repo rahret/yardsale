@@ -94,6 +94,10 @@ _Last updated: 2026-11-01_
   lists texting buyers about expiring holds as a next step.
   - _Shipped in #30:_ email alerts (ZeptoMail) for every hold and Buy Now purchase —
     item, buyer, phone or pickup code, and when a hold runs out; on/off on the Account page.
+  - _Done (pending merge):_ **buyer confirmations** — a "You're holding this" view (countdown,
+    address, hours, name to give) remembered on the buyer's device; an optional email on the
+    hold form for a hold confirmation; a Buy Now confirmation email with the pickup code,
+    address and hours; pickup details on the Buy Now confirmation page.
   - _Still to do:_ text-message alerts; a morning-of summary; texting buyers about expiring
     holds.
 - 🟡 **Adding items is slow.** Typing in 80 items is the biggest reason sellers will give up. A
