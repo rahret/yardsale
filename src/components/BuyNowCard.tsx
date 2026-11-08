@@ -1,31 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import type { Order, Sale } from "@/lib/types";
+import type { Order } from "@/lib/types";
 import { MIN_CHARGE_CENTS, sellerNetCents, toCents } from "@/lib/fees";
 import { money } from "@/lib/utils";
 
-
-/** Seller-side Buy Now: setup status, what fees mean, and the list of online
- * orders with "Picked up" and "Refund". (Each item chooses Buy Now or Hold.) */
+/** The seller's Buy Now orders, with "Picked up" and "Refund". */
 export default function BuyNowCard({
-  sale,
-  payoutsReady,
   orders,
   onOrderUpdated,
   onItemsChanged,
-  serverReady = true,
 }: {
-  sale: Pick<Sale, "id">;
-  payoutsReady: boolean;
   /** The sale's online orders, kept up to date by the sale page (live updates). */
   orders: Order[];
   /** An order was marked picked up or refunded here. */
   onOrderUpdated: (order: Order) => void;
   /** An order changed an item (refund puts it back on sale). */
   onItemsChanged: () => void;
-  /** The server can take payments (Stripe and Supabase keys are set). */
-  serverReady?: boolean;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmRefundId, setConfirmRefundId] = useState<string | null>(null);
@@ -46,44 +37,15 @@ export default function BuyNowCard({
     if (action === "refund") onItemsChanged();
   }
 
-  const exampleCents = toCents(25);
-
   return (
     <div>
-      {!payoutsReady ? (
-        <div className="text-sm">
-          Let buyers pay online with card, Apple Pay, Google Pay or Cash App Pay — the item is theirs right away and
-          you&apos;re paid even if they&apos;re late.{" "}
-          <a href="/dashboard/account" className="text-grass-dark font-semibold underline">
-            Set up payouts on your Account page
-          </a>{" "}
-          first.
-        </div>
-      ) : (
-        <>
-          <div className="text-sm">
-            {serverReady ? (
-              <span className="text-grass-dark font-semibold">● Ready.</span>
-            ) : (
-              <span className="text-marker font-semibold">● Off on this site (see above).</span>
-            )} Choose <strong>💳 Buy Now</strong> or{" "}
-            <strong>✋ Hold</strong> for each item when you add or edit it. Buy Now items are paid online and picked
-            up with a code; Hold items are reserved and paid in person.
-          </div>
-          <div className="text-[11px] opacity-60 mt-2">
-            Card and service fees come out of each Buy Now sale: on a {money(25)} item you&apos;d receive about{" "}
-            {money(sellerNetCents(exampleCents) / 100)}, and on a {money(5)} item about{" "}
-            {money(sellerNetCents(toCents(5)) / 100)}. Bulk items and anything under {money(MIN_CHARGE_CENTS / 100)}{" "}
-            can&apos;t use Buy Now. If a buyer doesn&apos;t show up, you can refund them below.
-          </div>
-        </>
-      )}
-
       {error && <div className="text-marker text-xs font-semibold mt-2">{error}</div>}
 
-      {orders.length > 0 && (
-        <div className="mt-4">
-          <div className="text-xs font-bold opacity-70 mb-1.5">Online orders</div>
+      <div>
+        <div className="text-xs font-bold opacity-70 mb-1.5">💳 Buy Now (online orders)</div>
+        {orders.length === 0 ? (
+          <p className="text-sm opacity-60">No online orders yet.</p>
+        ) : (
           <div className="divide-y divide-chalk-dim">
             {orders.map((o) => (
               <div key={o.id} className="py-2 flex items-center gap-2 flex-wrap text-sm">
@@ -139,8 +101,47 @@ export default function BuyNowCard({
               </div>
             ))}
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** What Buy Now and Holds are, the fees, and whether online payment is ready:
+ * shown at the top of the Holds & Buy Now card. */
+export function BuyNowIntro({ payoutsReady, serverReady = true }: { payoutsReady: boolean; serverReady?: boolean }) {
+  const exampleCents = toCents(25);
+  return (
+    <div className="mb-4">
+      {!payoutsReady ? (
+        <div className="text-sm">
+          Let buyers pay online with card, Apple Pay, Google Pay or Cash App Pay — the item is theirs right away and
+          you&apos;re paid even if they&apos;re late.{" "}
+          <a href="/dashboard/account" className="text-grass-dark font-semibold underline">
+            Set up payouts on your Account page
+          </a>{" "}
+          first.
         </div>
+      ) : (
+        <>
+          <div className="text-sm">
+            {serverReady ? (
+              <span className="text-grass-dark font-semibold">● Ready.</span>
+            ) : (
+              <span className="text-marker font-semibold">● Off on this site (see below).</span>
+            )} Choose <strong>💳 Buy Now</strong> or{" "}
+            <strong>✋ Hold</strong> for each item when you add or edit it. Buy Now items are paid online and picked
+            up with a code; Hold items are reserved and paid in person.
+          </div>
+          <div className="text-[11px] opacity-60 mt-2">
+            Card and service fees come out of each Buy Now sale: on a {money(25)} item you&apos;d receive about{" "}
+            {money(sellerNetCents(exampleCents) / 100)}, and on a {money(5)} item about{" "}
+            {money(sellerNetCents(toCents(5)) / 100)}. Bulk items and anything under {money(MIN_CHARGE_CENTS / 100)}{" "}
+            can&apos;t use Buy Now. If a buyer doesn&apos;t show up, you can refund them below.
+          </div>
+        </>
       )}
+
     </div>
   );
 }

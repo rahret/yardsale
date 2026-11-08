@@ -11,7 +11,7 @@ import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import ShareSaleCard from "@/components/ShareSaleCard";
 import SnapList from "@/components/SnapList";
 import SellModePicker, { SELL_MODE_LABELS, sellModeError } from "@/components/SellModePicker";
-import BuyNowCard from "@/components/BuyNowCard";
+import BuyNowCard, { BuyNowIntro } from "@/components/BuyNowCard";
 import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
 import NextSaleCard, { type OtherSale } from "@/components/NextSaleCard";
 import { removeUnusedPhotoFiles } from "@/lib/photoFiles";
@@ -804,6 +804,7 @@ export default function SaleAdmin({
 
       {/* online payments */}
       <Card title="✋ Holds & 💳 Buy Now orders" id="orders">
+        <BuyNowIntro payoutsReady={payoutsReady} serverReady={setup.paymentsMissing.length === 0} />
         {!premium && (
           <div className="mb-3">
             <UpgradeNote>
@@ -820,14 +821,10 @@ export default function SaleAdmin({
           onExpired={liveRefresh}
         />
         <div className="border-t border-cardboard-dark/30 my-4" />
-        <div className="text-xs font-bold opacity-70 mb-1.5">💳 Buy Now (online payments)</div>
         <BuyNowCard
-          sale={sale}
-          payoutsReady={payoutsReady}
           orders={orders}
           onOrderUpdated={(o) => setOrders((prev) => prev.map((p) => (p.id === o.id ? o : p)))}
           onItemsChanged={reloadItems}
-          serverReady={setup.paymentsMissing.length === 0}
         />
       </Card>
 
