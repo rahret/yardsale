@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
@@ -15,6 +15,8 @@ import BuyNowCard from "@/components/BuyNowCard";
 import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
 import NextSaleCard, { type OtherSale } from "@/components/NextSaleCard";
 import { removeUnusedPhotoFiles } from "@/lib/photoFiles";
+import { useSaleLive } from "@/components/useSaleLive";
+import { SELLER_ORDER_STATUSES, newHolds, newPaidOrders } from "@/lib/liveUpdates";
 import { HOUR_OPTIONS, toHour } from "@/lib/hours";
 import { normalizeAddress, addressFormatError } from "@/lib/address";
 import { ADDRESS_NOT_FOUND, checkAddress, sameAddress } from "@/lib/addressCheck";
@@ -88,6 +90,14 @@ export default function SaleAdmin({
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
+  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  // buyer activity that arrived while the page is open (live updates)
+  const [alerts, setAlerts] = useState<{ id: string; text: string }[]>([]);
+  const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const ordersRef = useRef(orders);
+  ordersRef.current = orders;
   // Pro / Sale Pass: holds, Buy Now, directory listing, no item cap
   const premium = access === "full";
   const itemLimitReached = access === "none" || (access === "trial" && items.length >= TRIAL_LIMITS.items);
@@ -573,6 +583,47 @@ export default function SaleAdmin({
     }
   }
 
+  // a buyer held or bought something (or anything else changed): reload, and
+  // tell the seller about new holds and Buy Now orders
+  async function liveRefresh() {
+    const supabase = createClient();
+    const [{ data: nextItems }, { data: nextOrders }] = await Promise.all([
+      supabase.from("items").select(ITEM_SELECT).eq("sale_id", sale.id).order("created_at", { ascending: false }),
+      supabase
+        .from("orders")
+        .select("*")
+        .eq("sale_id", sale.id)
+        .in("status", SELLER_ORDER_STATUSES)
+        .order("created_at", { ascending: false }),
+    ]);
+    const fresh: { id: string; text: string }[] = [];
+    const flashed: string[] = [];
+    if (nextItems) {
+      for (const i of newHolds(itemsRef.current, nextItems)) {
+        const who = i.item_holds?.name ? ` by ${i.item_holds.name}` : "";
+        fresh.push({ id: `hold:${i.id}:${i.reserved_at}`, text: `✋ ${i.name} was put on hold${who}` });
+        flashed.push(i.id);
+      }
+      setItems(nextItems);
+    }
+    if (nextOrders) {
+      for (const o of newPaidOrders(ordersRef.current, nextOrders as Order[])) {
+        fresh.push({ id: `order:${o.id}`, text: `💳 ${o.item_name} was bought online — ${money(o.amount_cents / 100)}` });
+        if (o.item_id) flashed.push(o.item_id);
+      }
+      setOrders(nextOrders as Order[]);
+    }
+    if (fresh.length) {
+      setAlerts((prev) => [...prev.filter((a) => !fresh.some((f) => f.id === a.id)), ...fresh].slice(-4));
+      setFlashIds((prev) => new Set([...Array.from(prev), ...flashed]));
+      setTimeout(() => {
+        setAlerts((prev) => prev.filter((a) => !fresh.some((f) => f.id === a.id)));
+        setFlashIds((prev) => new Set(Array.from(prev).filter((id) => !flashed.includes(id))));
+      }, 10_000);
+    }
+  }
+  const liveMode = useSaleLive(sale.id, liveRefresh);
+
   async function reloadItems() {
     const { data } = await createClient()
       .from("items")
@@ -618,7 +669,20 @@ export default function SaleAdmin({
       <a href="/dashboard" className="text-sm font-semibold opacity-70">
         ← All sales
       </a>
-      <div className="font-marker text-3xl text-marker -rotate-1 mt-2 mb-5 break-words">{sale.name}</div>
+      <div className="font-marker text-3xl text-marker -rotate-1 mt-2 mb-1 break-words">{sale.name}</div>
+      <div className="text-[11px] font-semibold opacity-60 mb-4 flex items-center gap-1.5" aria-live="polite">
+        <span
+          className={`inline-block w-2 h-2 rounded-full ${
+            liveMode === "live" ? "bg-grass" : liveMode === "polling" ? "bg-amber" : "bg-cardboard-dark/50"
+          }`}
+          aria-hidden
+        />
+        {liveMode === "live"
+          ? "Live — new holds and orders appear here as they happen"
+          : liveMode === "polling"
+            ? "Checking for new holds and orders every 15 seconds"
+            : "Connecting…"}
+      </div>
 
       {sale.archived_at && (
         <div className="bg-cardboard-dark/15 border-2 border-cardboard-dark rounded-xl p-3 mb-4 flex items-center gap-3 flex-wrap">
@@ -740,8 +804,8 @@ export default function SaleAdmin({
         <BuyNowCard
           sale={sale}
           payoutsReady={payoutsReady}
-          initialOrders={initialOrders}
-          hasBuyNowItems={items.some((i) => i.sell_mode === "buy_now")}
+          orders={orders}
+          onOrderUpdated={(o) => setOrders((prev) => prev.map((p) => (p.id === o.id ? o : p)))}
           onItemsChanged={reloadItems}
         />
       </Card>
@@ -1174,7 +1238,10 @@ export default function SaleAdmin({
         {sortedItems.length === 0 && <div className="text-sm opacity-60">No items yet — add your first one above.</div>}
         <div className="divide-y divide-chalk-dim">
           {sortedItems.map((item) => (
-            <div key={item.id} className="py-3">
+            <div
+              key={item.id}
+              className={`py-3 transition-colors duration-700 ${flashIds.has(item.id) ? "bg-sun/30 -mx-2 px-2 rounded-lg" : ""}`}
+            >
               <div className="flex items-center gap-3">
                 <Thumb item={item} />
                 <div className="flex-1 min-w-0">
@@ -1375,6 +1442,24 @@ export default function SaleAdmin({
       <Card title="♻️ Next sale" id="next-sale">
         <NextSaleCard sale={sale} items={items} otherSales={otherSales} access={access} onItemsMoved={reloadItems} />
       </Card>
+
+      {alerts.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md space-y-2" role="status">
+          {alerts.map((a) => (
+            <div key={a.id} className="bg-ink text-chalk text-sm rounded-lg px-4 py-3 shadow-tag flex items-center gap-3">
+              <span className="flex-1 min-w-0 break-words">{a.text}</span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                onClick={() => setAlerts((prev) => prev.filter((x) => x.id !== a.id))}
+                className="opacity-70 hover:opacity-100 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {saleModal && (
         <SalePriceOverlay

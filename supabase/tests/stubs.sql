@@ -15,3 +15,5 @@ create table storage.objects (id uuid primary key default gen_random_uuid(), buc
 create function storage.foldername(name text) returns text[] language sql as $$ select string_to_array(name, '/') $$;
 grant usage on schema auth to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
+-- Supabase creates this publication for Realtime (live updates).
+create publication supabase_realtime;

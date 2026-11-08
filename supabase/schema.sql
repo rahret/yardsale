@@ -1532,6 +1532,32 @@ create policy "Owners can delete photos for their own sales"
   );
 
 -- ============================================================================
+-- LIVE UPDATES: the seller's sale page listens for changes to its items,
+-- holds and orders (Supabase Realtime) so new holds and Buy Now purchases
+-- appear without reloading. Realtime only sends changes for tables in the
+-- supabase_realtime publication, and still applies each table's RLS, so a
+-- seller only hears about their own sales.
+-- ============================================================================
+do $$
+declare
+  t text;
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    raise notice 'supabase_realtime publication not found; live updates will fall back to polling';
+    return;
+  end if;
+  foreach t in array array['items', 'item_holds', 'orders'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end;
+$$;
+
+-- ============================================================================
 -- SERVER ROLE: the app's server code (Stripe routes and webhook) connects with
 -- the service_role key to record payout accounts and paid orders, which users
 -- must never write themselves. Supabase usually grants service_role access to

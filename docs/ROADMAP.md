@@ -81,6 +81,8 @@ _Last updated: 2026-11-01_
   less stale than first thought, but it's polling rather than true live updates. The
   reservation function stops two people claiming the same item; the second person only finds
   out when they try. _Possible upgrade:_ Supabase Realtime instead of polling.
+  - _Done (pending merge):_ the **seller's** sale page now updates live (see "Other ideas").
+    The buyer page still refreshes every 4 seconds.
 - ✅ **Items can't be linked to directly.** A seller can't share a link to just the couch.
   - _Shipped in #14:_ `?item=<id>` opens that item, with its own link preview; buyers get
     "Share this item".
@@ -207,7 +209,11 @@ _Last updated: 2026-11-01_
 
 ## 6. Other ideas & follow-ups
 
-- ⬜ Seller-side live updates on the dashboard (reservations appear without reloading).
+- ✅ Seller-side live updates on the dashboard (reservations appear without reloading).
+  _Done (pending merge):_ the sale page listens for changes to its items, holds and orders
+  (Supabase Realtime): new holds and Buy Now purchases appear right away with a pop-up alert
+  and a highlight, and a "Live" dot shows it's connected. Falls back to checking every 15
+  seconds if live updates can't connect, and checks whenever the page comes back into view.
 - ✅ Item photos are stored at full phone size; shrinking them on upload would speed up the
   buyer page and save storage. _Shipped in #30:_ scaled to 1,600 px JPEG in the
   browser before upload (also strips the photo's GPS location).
