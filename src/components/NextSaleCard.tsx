@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Item, Sale } from "@/lib/types";
 import { friendlyDbError, randomSuffix, slugify } from "@/lib/utils";
@@ -38,6 +38,17 @@ export default function NextSaleCard({
   // the trial includes one sale, and a lapsed plan can't add sales or items
   const canCopy = access === "full";
   const canMove = access !== "none" && otherSales.length > 0;
+
+  // "Copy to a new sale" from the dashboard's sale menu lands here with ?copy=1
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("copy") !== "1") return;
+    setOpen("copy");
+    params.delete("copy");
+    const qs = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`);
+    requestAnimationFrame(() => document.getElementById("next-sale")?.scrollIntoView({ block: "start" }));
+  }, []);
 
   function toggle(panel: "copy" | "move") {
     setOpen((o) => (o === panel ? null : panel));

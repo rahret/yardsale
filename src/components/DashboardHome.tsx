@@ -1,19 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Sale } from "@/lib/types";
 import { friendlyDbError, randomSuffix, slugify } from "@/lib/utils";
 import type { AddressFields } from "@/lib/address";
 import { type Access, TRIAL_LIMITS, UPGRADE_HREF } from "@/lib/billing";
 import { LockedBadge, UpgradeNote } from "@/components/PlanOptions";
-
-const STATUS_LABEL: Record<Sale["status"], { label: string; cls: string }> = {
-  draft: { label: "Draft", cls: "bg-cardboard-dark/20 text-ink" },
-  live: { label: "🟢 Live", cls: "bg-grass/20 text-grass-dark" },
-  ended: { label: "Ended", cls: "bg-marker/15 text-marker" },
-};
+import SaleListCard from "@/components/SaleListCard";
 
 export default function DashboardHome({
   initialSales,
@@ -34,9 +29,34 @@ export default function DashboardHome({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [toast, setToast] = useState<{ sale: Sale; archived: boolean } | null>(null);
+  const [archiveError, setArchiveError] = useState("");
   const active = sales.filter((s) => !s.archived_at);
   const archived = sales.filter((s) => s.archived_at);
   const canCreate = access === "full" || (access === "trial" && sales.length < TRIAL_LIMITS.sales);
+
+  // the "Archived … Undo" message goes away on its own
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  async function setArchived(sale: Sale, archived: boolean, undo = false) {
+    setArchiveError("");
+    const { data, error } = await createClient()
+      .from("sales")
+      .update({ archived_at: archived ? new Date().toISOString() : null })
+      .eq("id", sale.id)
+      .select()
+      .single();
+    if (error || !data) {
+      setArchiveError(friendlyDbError(error?.message));
+      return;
+    }
+    setSales((prev) => prev.map((s) => (s.id === sale.id ? data : s)));
+    setToast(undo ? null : { sale: data, archived });
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -102,26 +122,9 @@ export default function DashboardHome({
       )}
 
       <div className="grid gap-3 mb-6">
-        {[...active, ...(showArchived ? archived : [])].map((sale) => {
-          const st = sale.archived_at
-            ? { label: "🗄️ Archived", cls: "bg-cardboard-dark/20 text-ink opacity-80" }
-            : STATUS_LABEL[sale.status];
-          return (
-            <a
-              key={sale.id}
-              href={`/dashboard/sales/${sale.id}`}
-              className={`bg-white border-2 border-cardboard-dark rounded-xl p-4 flex items-center justify-between shadow-tag hover:-translate-y-0.5 transition-transform ${
-                sale.archived_at ? "opacity-70" : ""
-              }`}
-            >
-              <div>
-                <div className="font-bold">{sale.name}</div>
-                <div className="text-xs opacity-60 mt-0.5">/s/{sale.slug}</div>
-              </div>
-              <span className={`text-xs font-bold px-3 py-1 rounded-full ${st.cls}`}>{st.label}</span>
-            </a>
-          );
-        })}
+        {[...active, ...(showArchived ? archived : [])].map((sale) => (
+          <SaleListCard key={sale.id} sale={sale} onArchive={(on) => setArchived(sale, on)} />
+        ))}
       </div>
 
       {archived.length > 0 && (
@@ -133,6 +136,26 @@ export default function DashboardHome({
         >
           {showArchived ? "Hide archived sales" : `Show archived sales (${archived.length})`}
         </button>
+      )}
+
+      {archiveError && <p className="text-marker text-sm font-semibold -mt-3 mb-4">{archiveError}</p>}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md bg-ink text-chalk text-sm rounded-lg px-4 py-3 shadow-tag flex items-center gap-4"
+        >
+          <span className="flex-1 min-w-0 break-words">
+            {toast.archived ? "🗄️ Archived" : "↩️ Unarchived"} &ldquo;{toast.sale.name}&rdquo;
+          </span>
+          <button
+            type="button"
+            onClick={() => setArchived(toast.sale, !toast.archived, true)}
+            className="font-bold underline shrink-0"
+          >
+            Undo
+          </button>
+        </div>
       )}
 
       {creating ? (
