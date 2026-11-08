@@ -697,7 +697,7 @@ as $$
 declare
   v_src text := lower(coalesce(p_src, ''));
 begin
-  if v_src not in ('qr', 'share', 'facebook', 'group', 'craigslist', 'text', 'email', 'friend', 'directory') then
+  if v_src not in ('qr', 'share', 'facebook', 'group', 'craigslist', 'text', 'email', 'friend', 'directory', 'tag', 'flyer') then
     v_src := 'direct';
   end if;
   insert into public.sale_visits (sale_id, item_id, src)

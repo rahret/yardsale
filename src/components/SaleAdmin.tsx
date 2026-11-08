@@ -728,6 +728,18 @@ export default function SaleAdmin({
           >
             🪧 Sign builder
           </a>
+          <a
+            href={`/dashboard/sales/${sale.id}/tags`}
+            className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm"
+          >
+            🏷️ Price tags
+          </a>
+          <a
+            href={`/dashboard/sales/${sale.id}/flyer`}
+            className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm"
+          >
+            📄 Flyer
+          </a>
         </div>
         <ShareSaleCard
           sale={sale}

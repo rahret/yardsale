@@ -18,6 +18,7 @@ select public.log_sale_visit('a0000000-0000-0000-0000-000000000001', '<script>')
 select public.log_sale_visit('a0000000-0000-0000-0000-000000000001', 'qr', 'b0000000-0000-0000-0000-0000000000ff'); -- unknown item -> null
 select public.log_sale_visit('a0000000-0000-0000-0000-000000000002', 'qr');                  -- draft: ignored
 select public.log_sale_visit('a0000000-0000-0000-0000-000000000001', 'directory');         -- home page directory
+select public.log_sale_visit('a0000000-0000-0000-0000-000000000001', 'tag');               -- printed price tag
 do $$
 begin
   begin
@@ -37,8 +38,9 @@ reset role;
 
 do $$
 begin
-  assert (select count(*) from public.sale_visits) = 5, 'five visits recorded';
+  assert (select count(*) from public.sale_visits) = 6, 'six visits recorded';
   assert (select count(*) from public.sale_visits where src = 'directory') = 1, 'directory visits are tagged';
+  assert (select count(*) from public.sale_visits where src = 'tag') = 1, 'price-tag visits are tagged';
   assert (select count(*) from public.sale_visits where src = 'direct') = 1, 'unknown sources become direct';
   assert (select count(*) from public.sale_visits where src = 'facebook' and item_id is not null) = 1, 'source is lower-cased; item kept';
   assert (select count(*) from public.sale_visits where sale_id = 'a0000000-0000-0000-0000-000000000002') = 0, 'drafts are not counted';
