@@ -15,6 +15,9 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   if (!data || data.sale.status === "draft") {
     return { title: "Yard Sale QR", robots: { index: false } };
   }
+  if (data.sale.archived_at) {
+    return { title: `${data.sale.name} has ended`, robots: { index: false } };
+  }
 
   const origin = requestOrigin();
   const item = searchParams.item ? data.items.find((i) => i.id === searchParams.item) : undefined;
@@ -56,6 +59,43 @@ export default async function PublicSalePage({ params, searchParams }: Props) {
             <p className="opacity-70 text-sm">
               This link doesn&apos;t match any garage sale. Double-check the URL or QR code.
             </p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (found.sale.archived_at) {
+    // the seller tucked this sale away: say it's over, and point old signs and
+    // links at their current sale if they have one (published sales are public)
+    const { data: next } = await createClient()
+      .from("sales")
+      .select("slug, name")
+      .eq("owner_id", found.sale.owner_id)
+      .eq("status", "live")
+      .is("archived_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return (
+      <>
+        <SiteHeader signedIn={signedIn} />
+        <div className="min-h-[70vh] flex items-center justify-center px-4 text-center">
+          <div className="max-w-md">
+            <div className="font-marker text-3xl text-marker mb-2 break-words">{found.sale.name} has ended</div>
+            <p className="opacity-70 text-sm mb-5">Thanks for stopping by — this sale is over.</p>
+            {next ? (
+              <a
+                href={`/s/${next.slug}`}
+                className="inline-block bg-grass text-white font-bold px-5 py-3 rounded-lg shadow-tag break-words"
+              >
+                See their current sale: {next.name} →
+              </a>
+            ) : (
+              <a href="/find" className="inline-block bg-ink text-chalk font-bold px-5 py-3 rounded-lg shadow-tag">
+                Find yard sales near you
+              </a>
+            )}
           </div>
         </div>
       </>

@@ -124,12 +124,17 @@ _Last updated: 2026-11-01_
     start partway down a used label sheet.
 - 🟡 **Each sale starts from scratch.** Add "copy this sale" and "move unsold items to my next
   sale", plus multi-family sales with several sellers on one sale.
-  - _Done (pending merge):_ **♻️ Next sale** card on the sale page. **Copy to a new sale**: a
+  - _Shipped in #36:_ **♻️ Next sale** card on the sale page. **Copy to a new sale**: a
     new draft with the same name (editable), address, tagline and payment methods, plus
     unsold, all or no items (photos shared, not re-uploaded; no dates, note, holds or stats).
     **Move unsold items** to another of your sales: holds stay for their buyer, and a part-sold
     bulk lot moves what's left while what sold stays in the old sale's totals. Copying a sale
     needs Pro or the Sale Pass (the trial has one sale).
+  - _Done (pending merge):_ **🗄️ Archive** a sale that isn't live: hidden from the sales
+    list ("Show archived sales"), its link tells buyers it's over and points to the seller's
+    live sale if there is one. Nothing is deleted; going live again unarchives it. Archived
+    sales still count toward the trial's one sale. (Deleting sales was considered and left
+    out: it would lose Buy Now order records and break printed QR codes.)
   - _Still to do:_ multi-family sales.
 - 🟡 **There are no numbers.** Sellers can't see page views, QR scans versus link visits,
   most-viewed items or reservations. That's what proves the app brought them buyers, and it's

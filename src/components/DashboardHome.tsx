@@ -33,6 +33,9 @@ export default function DashboardHome({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const active = sales.filter((s) => !s.archived_at);
+  const archived = sales.filter((s) => s.archived_at);
   const canCreate = access === "full" || (access === "trial" && sales.length < TRIAL_LIMITS.sales);
 
   async function handleCreate(e: React.FormEvent) {
@@ -94,14 +97,22 @@ export default function DashboardHome({
         </div>
       )}
 
+      {sales.length > 0 && active.length === 0 && (
+        <p className="text-sm opacity-70 mb-4">All your sales are archived.</p>
+      )}
+
       <div className="grid gap-3 mb-6">
-        {sales.map((sale) => {
-          const st = STATUS_LABEL[sale.status];
+        {[...active, ...(showArchived ? archived : [])].map((sale) => {
+          const st = sale.archived_at
+            ? { label: "🗄️ Archived", cls: "bg-cardboard-dark/20 text-ink opacity-80" }
+            : STATUS_LABEL[sale.status];
           return (
             <a
               key={sale.id}
               href={`/dashboard/sales/${sale.id}`}
-              className="bg-white border-2 border-cardboard-dark rounded-xl p-4 flex items-center justify-between shadow-tag hover:-translate-y-0.5 transition-transform"
+              className={`bg-white border-2 border-cardboard-dark rounded-xl p-4 flex items-center justify-between shadow-tag hover:-translate-y-0.5 transition-transform ${
+                sale.archived_at ? "opacity-70" : ""
+              }`}
             >
               <div>
                 <div className="font-bold">{sale.name}</div>
@@ -112,6 +123,17 @@ export default function DashboardHome({
           );
         })}
       </div>
+
+      {archived.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowArchived((v) => !v)}
+          aria-expanded={showArchived}
+          className="block text-xs font-bold underline opacity-70 -mt-3 mb-6"
+        >
+          {showArchived ? "Hide archived sales" : `Show archived sales (${archived.length})`}
+        </button>
+      )}
 
       {creating ? (
         <form onSubmit={handleCreate} className="bg-white border-2 border-cardboard-dark rounded-xl p-4 space-y-3">

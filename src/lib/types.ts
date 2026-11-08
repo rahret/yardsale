@@ -29,6 +29,8 @@ export interface Sale extends Address {
   listed: boolean;
   /** Payment methods shown to buyers as icons (never the seller's handles). */
   accepted_payments: PaymentMethod[];
+  /** When the seller archived it (hidden from their list, shown to buyers as over). */
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
