@@ -294,6 +294,49 @@ Setup:
      Zoho account is outside the US data centre (e.g. `https://api.zeptomail.eu/v1.1/email`)
 4. Re-run `supabase/schema.sql` (adds `email_alerts` and the `seller_notified_at` columns).
 
+## Snap & list (photo-first item entry, optional AI)
+
+In the **Add an item** card, sellers take or choose photos one after another; each is shrunk,
+uploaded to the sale's `snap/` folder and becomes an item card to fill in (name, price with
+quick buttons, category with quick picks, "Sell as a bulk lot" with a quantity, and "How buyers
+get it" — First come, first served / Hold / Buy Now, with the same plan and payout rules as the
+add-item form; new cards start with the last choice). **AI suggestions are optional:** with
+`ANTHROPIC_API_KEY` set (and `SNAP_LIST_AI` not `off`), each photo is also sent to Claude, which
+fills in a suggested name, category, price and short description (`/api/items/suggest`).
+Without the key, the flow works the same and sellers type the details. The seller reviews each suggestion (quick price buttons:
+−$1, +$1, $1, $5, $10, $20) and adds it, or adds them all at once. Nothing becomes an item until
+the seller adds it; unreviewed drafts are kept on that device. Trial sellers can use it.
+
+- The prompt, JSON shape and checks are in `src/lib/snapList.ts`; the request (structured
+  output, low effort, Anthropic's server-side fallback on Opus/Sonnet) in
+  `src/lib/snapListRequest.ts`.
+- Limits: 300 suggestions per seller per day, and 40 in total during the trial
+  (`SNAP_LIMIT_PER_DAY`, `SNAP_LIMIT_TRIAL`). Every call is logged with its tokens and cost in
+  `ai_suggestions` (server-only), so you can see what the feature costs:
+  `select model, count(*), sum(cost_usd) from ai_suggestions group by model;`
+- Model: `claude-opus-5-5` unless `SNAP_LIST_MODEL` is set (e.g. `claude-haiku-5-5`).
+
+Setup:
+
+1. Create a Claude Developer Platform account at platform.claude.com (separate from a Claude
+   subscription), add credits, and create an API key (ideally in a "production" workspace with
+   a monthly spend limit).
+2. In Vercel, set `ANTHROPIC_API_KEY` (and optionally `SNAP_LIST_MODEL`), then redeploy.
+3. Re-run `supabase/schema.sql` (adds `ai_suggestions`).
+
+Without the key (or with `SNAP_LIST_AI=off`), Snap & list runs without AI.
+
+**Comparing models on your own photos:** put 30–50 item photos (JPEG) in a folder and run
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-... npm run compare-snap -- ./my-photos
+# optional: --models claude-opus-5-5,claude-haiku-5-5  --expected prices.csv (filename,name,price)
+```
+
+It sends every photo to both models with the app's exact prompt and writes
+`snap-comparison.html` (side by side, with real token counts, cost per photo and per sale) into
+the folder.
+
 ## Sign builder
 
 `/dashboard/sales/[id]/sign` (the **🪧 Sign builder** button in the Share card) designs printed

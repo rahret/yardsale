@@ -898,6 +898,25 @@ revoke all on function public.complete_order(uuid, text, text, text) from public
 -- for table X" (a plain Postgres grant error, not an RLS violation). Granting
 -- explicitly here makes this schema work regardless of that default.
 -- ----------------------------------------------------------------------------
+-- ai_suggestions: one row per Snap & list suggestion (an item photo sent to
+-- Claude), for per-seller limits and to see what the feature costs. Written
+-- and read only by the server (service role); sellers have no access.
+-- ----------------------------------------------------------------------------
+create table if not exists public.ai_suggestions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  sale_id uuid references public.sales (id) on delete set null,
+  model text not null,
+  input_tokens int not null default 0,
+  output_tokens int not null default 0,
+  cost_usd numeric(10, 6),
+  ok boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create index if not exists ai_suggestions_user_created_idx on public.ai_suggestions (user_id, created_at);
+alter table public.ai_suggestions enable row level security;
+
+-- ----------------------------------------------------------------------------
 grant usage on schema public to anon, authenticated;
 
 grant select, update on public.profiles to anon, authenticated;
