@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sendEmail } from "./email";
+import { sendEmail, sendEmailDetailed } from "./email";
 import { escapeHtml, holdPlacedEmail, orderPaidEmail } from "./alertEmails";
 
 const ok = () => Promise.resolve(new Response(JSON.stringify({ data: [{ code: "EM_104" }] }), { status: 201 }));
@@ -94,5 +94,31 @@ describe("alert emails", () => {
     });
     expect(e.html).not.toContain("<img");
     expect(e.html).not.toContain("<script>");
+  });
+});
+
+describe("sendEmailDetailed", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const email = { to: "me@example.com", subject: "Test", html: "<p>t</p>", text: "t" };
+
+  it("names the missing settings", async () => {
+    vi.stubEnv("ZEPTOMAIL_TOKEN", "");
+    vi.stubEnv("ALERT_FROM_EMAIL", "");
+    expect(await sendEmailDetailed(email)).toEqual({
+      ok: false,
+      reason: "ZEPTOMAIL_TOKEN and ALERT_FROM_EMAIL aren't set on the server.",
+    });
+  });
+
+  it("passes on ZeptoMail's own error message, without the token", async () => {
+    vi.stubEnv("ZEPTOMAIL_TOKEN", "secret-token");
+    vi.stubEnv("ALERT_FROM_EMAIL", "alerts@example.com");
+    const body = JSON.stringify({
+      error: { code: "TM_4001", message: "Access Denied", details: [{ message: "Invalid API Token found" }] },
+    });
+    const f = vi.fn(() => Promise.resolve(new Response(body, { status: 401 })));
+    const r = await sendEmailDetailed(email, f as never);
+    expect(r).toEqual({ ok: false, reason: "ZeptoMail refused it (HTTP 401): Access Denied — Invalid API Token found" });
+    expect(JSON.stringify(r)).not.toContain("secret-token");
   });
 });

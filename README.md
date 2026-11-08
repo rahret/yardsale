@@ -394,7 +394,7 @@ sales. Nothing is deleted; Unarchive, or making the sale live again, restores it
 be deleted, which keeps Buy Now order records and printed QR codes intact. Archived sales
 still count toward the trial's one sale.
 
-## Live updates for sellers
+## Live updates
 
 The seller's sale page listens for changes to that sale's items, holds and orders with
 Supabase Realtime (`src/components/useSaleLive.ts`). When a buyer places a hold or pays with
@@ -404,6 +404,9 @@ page then polls). Even when live it re-checks once a minute, and whenever the pa
 into view. The **✋ Holds & 💳 Buy Now orders** card lists active holds (buyer, phone, time
 left, Mark sold / Cancel hold) above the online orders; expired holds are released when the
 page refreshes.
+
+The buyer's sale page uses the same live updates for its items (it used to refresh every 4
+seconds), and refreshes when a hold's time runs out.
 
 `supabase/schema.sql` adds `items`, `item_holds` and `orders` to the `supabase_realtime`
 publication; Realtime still applies RLS, so sellers only receive their own sales' changes.
@@ -419,6 +422,27 @@ publication; Realtime still applies RLS, so sellers only receive their own sales
   and the buyer is emailed their code, address and hours (`notifyBuyerOrderPaid`, using the
   email Stripe Checkout collects). Each email is sent once, through ZeptoMail like the seller
   alerts. No text messages yet.
+
+## Stats
+
+`/dashboard/sales/[id]/stats` (📊 **See all stats** under the sale page's numbers, or in the
+Share card) shows visits, items sold, money collected, item views, holds placed and online
+sales; visits by day (with holds and online sales per day, and a table view); where buyers
+came from, including the share from signs, price tags and flyers; and the most viewed items.
+It's built by `sale_stats()` in `supabase/schema.sql` (owner only, days in the sale's time
+zone). The breakdown is part of Pro and the Sale Pass; other plans see the headline numbers
+with an upgrade note. Item views are counted when a buyer opens an item (`item_views`, once
+per item per visit; a shared item link counts with the visit).
+
+## When something's not set up
+
+If a server setting is missing (Vercel → Settings → Environment Variables), the seller's sale
+page names it in the **Holds & Buy Now orders** card: `STRIPE_SECRET_KEY` /
+`SUPABASE_SERVICE_ROLE_KEY` for Buy Now, `SUPABASE_SERVICE_ROLE_KEY` / `ZEPTOMAIL_TOKEN` /
+`ALERT_FROM_EMAIL` for emails. Buyers then see "Online payment is off right now" instead of a
+Buy Now button that fails. **Send me a test email** on the Account page sends one email and
+shows ZeptoMail's exact error if it doesn't go out. Vercel's Preview deployments only get
+variables ticked for "Preview".
 
 ## Photos
 

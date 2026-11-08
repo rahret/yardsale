@@ -14,6 +14,7 @@ export default function BuyNowCard({
   orders,
   onOrderUpdated,
   onItemsChanged,
+  serverReady = true,
 }: {
   sale: Pick<Sale, "id">;
   payoutsReady: boolean;
@@ -23,6 +24,8 @@ export default function BuyNowCard({
   onOrderUpdated: (order: Order) => void;
   /** An order changed an item (refund puts it back on sale). */
   onItemsChanged: () => void;
+  /** The server can take payments (Stripe and Supabase keys are set). */
+  serverReady?: boolean;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmRefundId, setConfirmRefundId] = useState<string | null>(null);
@@ -59,7 +62,11 @@ export default function BuyNowCard({
       ) : (
         <>
           <div className="text-sm">
-            <span className="text-grass-dark font-semibold">● Ready.</span> Choose <strong>💳 Buy Now</strong> or{" "}
+            {serverReady ? (
+              <span className="text-grass-dark font-semibold">● Ready.</span>
+            ) : (
+              <span className="text-marker font-semibold">● Off on this site (see above).</span>
+            )} Choose <strong>💳 Buy Now</strong> or{" "}
             <strong>✋ Hold</strong> for each item when you add or edit it. Buy Now items are paid online and picked
             up with a code; Hold items are reserved and paid in person.
           </div>

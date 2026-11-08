@@ -212,6 +212,7 @@ function ProfileSection({
           <span className="block text-xs opacity-60">Sent to your login email, so you can set the item aside.</span>
         </span>
       </label>
+      <TestEmailButton />
       <SaveRow label="Save profile" status={status} onClick={() => save()} />
     </Card>
   );
@@ -690,6 +691,35 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="mb-2.5">
       <label className="block text-xs font-bold opacity-70 mb-1">{label}</label>
       {children}
+    </div>
+  );
+}
+
+/** Sends a test email to the seller and shows what happened. */
+function TestEmailButton() {
+  const [state, setState] = useState<{ busy: boolean; msg: string; ok?: boolean }>({ busy: false, msg: "" });
+  async function send() {
+    setState({ busy: true, msg: "" });
+    try {
+      const res = await fetch("/api/alerts/test", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      setState({
+        busy: false,
+        ok: !!data.ok,
+        msg: data.ok ? `Sent to ${data.to}. Check your inbox (and spam folder).` : `Not sent. ${data.reason || "Try again."}`,
+      });
+    } catch {
+      setState({ busy: false, ok: false, msg: "Couldn't reach the server." });
+    }
+  }
+  return (
+    <div className="mb-3 -mt-1 ml-6">
+      <button type="button" onClick={send} disabled={state.busy} className="text-xs font-bold underline disabled:opacity-50">
+        {state.busy ? "Sending…" : "Send me a test email"}
+      </button>
+      {state.msg && (
+        <p className={`text-xs mt-1 ${state.ok ? "text-grass-dark" : "text-marker font-semibold"}`}>{state.msg}</p>
+      )}
     </div>
   );
 }

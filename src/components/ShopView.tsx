@@ -20,6 +20,9 @@ import SaleSummary from "@/components/SaleSummary";
 import { canBuyOnline } from "@/lib/fees";
 import { saleLink, siteOriginForClient } from "@/lib/share";
 import { loadMyHolds, myHoldOn, saveMyHold, type MyHold } from "@/lib/myHolds";
+import { useSaleLive } from "@/components/useSaleLive";
+
+const BUYER_TABLES = ["items"] as const;
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "name";
 
@@ -29,6 +32,7 @@ export default function ShopView({
   saleDays,
   initialItemId,
   holdsAndBuyNow = true,
+  onlinePayments = true,
 }: {
   sale: Sale;
   initialItems: Item[];
@@ -37,6 +41,8 @@ export default function ShopView({
   initialItemId?: string;
   /** The seller's plan includes Holds and Buy Now; without it, every item is first come, first served. */
   holdsAndBuyNow?: boolean;
+  /** The site can take online payments (Stripe is set up on the server). */
+  onlinePayments?: boolean;
 }) {
   const [rawItems, setItems] = useState<Item[]>(initialItems);
   const items = useMemo(
@@ -56,24 +62,49 @@ export default function ShopView({
 
   const supabase = useMemo(() => createClient(), []);
 
-  // refetch items + sweep expired reservations every few seconds
+  // live updates: refetch when an item changes (a hold, a sale, a price…),
+  // after sweeping expired holds so the list is accurate
+  async function refresh() {
+    await supabase.rpc("sweep_expired_reservations", { p_sale_id: sale.id });
+    const { data } = await supabase
+      .from("items")
+      .select("*, item_photos(*)")
+      .eq("sale_id", sale.id)
+      .order("created_at", { ascending: false });
+    if (data) setItems(data as Item[]);
+  }
+  useSaleLive(sale.id, refresh, BUYER_TABLES);
+
+  // a hold running out isn't a change anyone makes, so refresh when the next
+  // one is due (that releases it for everyone)
+  const nextExpiry = useMemo(() => {
+    const ends = rawItems
+      .filter((i) => i.status === "reserved" && i.reserved_at)
+      .map((i) => reservationDeadline(i, sale))
+      .filter((t) => t > Date.now());
+    return ends.length ? Math.min(...ends) : null;
+  }, [rawItems, sale]);
   useEffect(() => {
-    let cancelled = false;
-    async function refresh() {
-      await supabase.rpc("sweep_expired_reservations", { p_sale_id: sale.id });
-      const { data } = await supabase
-        .from("items")
-        .select("*, item_photos(*)")
-        .eq("sale_id", sale.id)
-        .order("created_at", { ascending: false });
-      if (!cancelled && data) setItems(data as Item[]);
-    }
-    const poll = setInterval(refresh, 4000);
-    return () => {
-      cancelled = true;
-      clearInterval(poll);
-    };
-  }, [sale.id, supabase]);
+    if (!nextExpiry) return;
+    const t = setTimeout(refresh, Math.max(0, nextExpiry - Date.now()) + 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextExpiry]);
+
+  // count item opens (once per item per visit) for the seller's "most viewed";
+  // an item opened from a shared ?item= link is already counted with the visit
+  const openedFromLink = useRef(initialItemId || null);
+  useEffect(() => {
+    if (!selectedId || sale.status === "draft") return;
+    if (openedFromLink.current === selectedId) return;
+    openedFromLink.current = null;
+    const key = `view:${selectedId}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, "1");
+    } catch {}
+    supabase.rpc("log_item_view", { p_item_id: selectedId }).then(() => {});
+  }, [selectedId, sale.status, supabase]);
 
   // Count this visit (once per browser session) and where it came from, so
   // the seller can see which signs/posts bring people in.
@@ -216,6 +247,7 @@ export default function ShopView({
           item={selected}
           sale={sale}
           days={sortedDays}
+          onlinePayments={onlinePayments}
           myHold={myHoldOn(selected, myHolds)}
           onClose={() => setSelectedId(null)}
           onReserved={(next, hold) => {
@@ -391,6 +423,7 @@ function DetailSheet({
   item,
   sale,
   days,
+  onlinePayments,
   myHold,
   onClose,
   onReserved,
@@ -398,6 +431,7 @@ function DetailSheet({
   item: Item;
   sale: Sale;
   days: SaleDay[];
+  onlinePayments: boolean;
   /** This buyer's own hold on the item (placed from this device). */
   myHold: MyHold | null;
   onClose: () => void;
@@ -412,7 +446,7 @@ function DetailSheet({
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState("");
   const isBuyNow = item.sell_mode === "buy_now";
-  const canBuyNow = isBuyNow && canBuyOnline(item);
+  const canBuyNow = isBuyNow && canBuyOnline(item) && onlinePayments;
 
   async function buyNow() {
     setBuyError("");
@@ -628,12 +662,18 @@ function DetailSheet({
                     {buying ? "Opening checkout…" : `Buy now · ${money(item.price)}`}
                   </button>
                 ) : (
-                  <div className="text-sm text-center opacity-70">Ask the seller about this one at the sale.</div>
+                  <div className="text-sm text-center opacity-70">
+                    {onlinePayments
+                      ? "Ask the seller about this one at the sale."
+                      : "Online payment is off right now — you can still buy it at the sale."}
+                  </div>
                 )}
-                <div className="text-xs opacity-60 text-center mt-1.5">
-                  Card, Apple Pay, Google Pay or Cash App Pay. It&apos;s yours right away — pick it up at the sale
-                  with your code.
-                </div>
+                {canBuyNow && (
+                  <div className="text-xs opacity-60 text-center mt-1.5">
+                    Card, Apple Pay, Google Pay or Cash App Pay. It&apos;s yours right away — pick it up at the sale
+                    with your code.
+                  </div>
+                )}
                 {buyError && <div className="text-marker text-sm font-semibold mt-2 text-center">{buyError}</div>}
               </div>
             ) : (

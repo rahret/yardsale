@@ -5,6 +5,7 @@ import SiteHeader from "@/components/SiteHeader";
 import { isSignedIn } from "@/lib/currentUser";
 import { loadPublicSale, previewVersion, requestOrigin } from "@/lib/saleData";
 import { itemPreview, salePreview } from "@/lib/share";
+import { serverSetup } from "@/lib/serverSetup";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +125,7 @@ export default async function PublicSalePage({ params, searchParams }: Props) {
         saleDays={found.days}
         initialItemId={searchParams.item}
         holdsAndBuyNow={access === "full"}
+        onlinePayments={serverSetup().paymentsMissing.length === 0}
       />
     </>
   );

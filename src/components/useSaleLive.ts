@@ -4,15 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { FALLBACK_POLL_MS, SAFETY_POLL_MS, type LiveMode } from "@/lib/liveUpdates";
 
-/** Calls `onChange` whenever a buyer (or anyone) changes this sale's items,
- * holds or orders, using Supabase Realtime. If live updates can't connect it
- * falls back to checking every 15 seconds; even when connected it checks once
- * a minute as a safety net (e.g. if a table isn't published for Realtime), and
- * it always checks when the page comes back into view (phones drop
- * connections while asleep). Bursts of changes are batched into one call. */
-export function useSaleLive(saleId: string, onChange: () => void): LiveMode {
+type LiveTable = "items" | "item_holds" | "orders";
+const SELLER_TABLES: readonly LiveTable[] = ["items", "item_holds", "orders"];
+
+/** Calls `onChange` whenever anyone changes this sale's items (and, for the
+ * seller, its holds and orders), using Supabase Realtime. If live updates
+ * can't connect it falls back to checking every 15 seconds; even when
+ * connected it checks once a minute as a safety net (e.g. if a table isn't
+ * published for Realtime), and it always checks when the page comes back into
+ * view (phones drop connections while asleep). Bursts of changes are batched
+ * into one call. */
+export function useSaleLive(
+  saleId: string,
+  onChange: () => void,
+  /** Tables to listen to (all filtered by sale_id). Buyers can only see items. */
+  tables: readonly LiveTable[] = SELLER_TABLES
+): LiveMode {
   const [mode, setMode] = useState<LiveMode>("connecting");
   const onChangeRef = useRef(onChange);
+  const tableKey = tables.join(",");
   onChangeRef.current = onChange;
 
   useEffect(() => {
@@ -49,19 +59,18 @@ export function useSaleLive(saleId: string, onChange: () => void): LiveMode {
       if (cancelled) return;
       if (data.session?.access_token) await supabase.realtime.setAuth(data.session.access_token);
       if (cancelled) return;
-      channel = supabase
-        .channel(`sale-admin:${saleId}`)
-        .on("postgres_changes", { event: "*", schema: "public", table: "items", filter }, fire)
-        .on("postgres_changes", { event: "*", schema: "public", table: "item_holds", filter }, fire)
-        .on("postgres_changes", { event: "*", schema: "public", table: "orders", filter }, fire)
-        .subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            stopPolling();
-            setMode("live");
-          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-            startPolling();
-          }
-        });
+      let ch = supabase.channel(`sale:${saleId}:${tableKey}`);
+      for (const table of tableKey.split(",")) {
+        ch = ch.on("postgres_changes", { event: "*", schema: "public", table, filter }, fire);
+      }
+      channel = ch.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          stopPolling();
+          setMode("live");
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          startPolling();
+        }
+      });
     };
     connect().catch(startPolling);
     // if it hasn't connected after a while, don't leave the seller waiting
@@ -80,7 +89,7 @@ export function useSaleLive(saleId: string, onChange: () => void): LiveMode {
       document.removeEventListener("visibilitychange", check);
       if (channel) supabase.removeChannel(channel);
     };
-  }, [saleId]);
+  }, [saleId, tableKey]);
 
   return mode;
 }

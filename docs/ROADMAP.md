@@ -77,12 +77,12 @@ _Last updated: 2026-11-01_
     pre-ticked from the Account page).
   - _Decided against:_ early birds, parking and rain plan fields — tried, then removed to
     keep the page simple.
-- 🟡 **Changes don't show up live.** The buyer page refreshes every 4 seconds, so this is
+- ✅ **Changes don't show up live.** The buyer page refreshes every 4 seconds, so this is
   less stale than first thought, but it's polling rather than true live updates. The
   reservation function stops two people claiming the same item; the second person only finds
   out when they try. _Possible upgrade:_ Supabase Realtime instead of polling.
-  - _Done (pending merge):_ the **seller's** sale page now updates live (see "Other ideas").
-    The buyer page still refreshes every 4 seconds.
+  - _Shipped in #39:_ the **seller's** sale page updates live (see "Other ideas").
+  - _Done (pending merge):_ the **buyer** page updates live too, instead of every 4 seconds.
 - ✅ **Items can't be linked to directly.** A seller can't share a link to just the couch.
   - _Shipped in #14:_ `?item=<id>` opens that item, with its own link preview; buyers get
     "Share this item".
@@ -94,7 +94,7 @@ _Last updated: 2026-11-01_
   lists texting buyers about expiring holds as a next step.
   - _Shipped in #30:_ email alerts (ZeptoMail) for every hold and Buy Now purchase —
     item, buyer, phone or pickup code, and when a hold runs out; on/off on the Account page.
-  - _Done (pending merge):_ **buyer confirmations** — a "You're holding this" view (countdown,
+  - _Shipped in #40:_ **buyer confirmations** — a "You're holding this" view (countdown,
     address, hours, name to give) remembered on the buyer's device; an optional email on the
     hold form for a hold confirmation; a Buy Now confirmation email with the pickup code,
     address and hours; pickup details on the Buy Now confirmation page.
@@ -141,17 +141,19 @@ _Last updated: 2026-11-01_
     live sale if there is one. Nothing is deleted; going live again unarchives it. Archived
     sales still count toward the trial's one sale. (Deleting sales was considered and left
     out: it would lose Buy Now order records and break printed QR codes.)
-  - _Done (pending merge):_ a ⋯ menu on each sale in the dashboard list: Open sale, View
+  - _Shipped in #38:_ a ⋯ menu on each sale in the dashboard list: Open sale, View
     public page, Copy to a new sale, and Archive (with Undo) / Unarchive. Live sales show
     Archive greyed out until they're ended.
   - _Still to do:_ multi-family sales.
-- 🟡 **There are no numbers.** Sellers can't see page views, QR scans versus link visits,
+- ✅ **There are no numbers.** Sellers can't see page views, QR scans versus link visits,
   most-viewed items or reservations. That's what proves the app brought them buyers, and it's
   the clearest thing to put on a paid plan.
   - _Shipped in #14:_ visit counts by source (QR / sign, Facebook, group posts, Craigslist,
     text, email, share button, shared by buyers) in the Share card.
-  - _Still to do:_ most-viewed items (item visits are already recorded), reservations and
-    sales over time, a proper stats view.
+  - _Done (pending merge):_ **📊 Stats page** — visits, item views, holds, online sales and
+    money collected; visits by day (table view too); where buyers came from, with the share
+    from signs, tags and flyers; most viewed items (item opens are now counted). Full
+    breakdown on Pro and the Sale Pass; headline numbers otherwise.
 
 ## 3½. Onboarding
 
@@ -214,7 +216,7 @@ _Last updated: 2026-11-01_
 ## 6. Other ideas & follow-ups
 
 - ✅ Seller-side live updates on the dashboard (reservations appear without reloading).
-  _Done (pending merge):_ the sale page listens for changes to its items, holds and orders
+  _Shipped in #39:_ the sale page listens for changes to its items, holds and orders
   (Supabase Realtime): new holds and Buy Now purchases appear right away with a pop-up alert
   and a highlight, and a "Live" dot shows it's connected. Falls back to checking every 15
   seconds if live updates can't connect, and checks whenever the page comes back into view.

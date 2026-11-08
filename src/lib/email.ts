@@ -25,12 +25,21 @@ export function emailConfigured(): boolean {
   return !!process.env.ZEPTOMAIL_TOKEN && !!process.env.ALERT_FROM_EMAIL;
 }
 
+export type SendResult = { ok: true } | { ok: false; reason: string };
+
 export async function sendEmail(email: Email, f: Fetch = fetch): Promise<boolean> {
+  return (await sendEmailDetailed(email, f)).ok;
+}
+
+/** Like sendEmail, but says why a send failed (for the seller's "send a test
+ * email" button). The reason never includes the token. */
+export async function sendEmailDetailed(email: Email, f: Fetch = fetch): Promise<SendResult> {
   const token = process.env.ZEPTOMAIL_TOKEN?.trim();
   const from = process.env.ALERT_FROM_EMAIL?.trim();
   if (!token || !from) {
-    console.warn("Email not sent (ZEPTOMAIL_TOKEN / ALERT_FROM_EMAIL not set):", email.subject);
-    return false;
+    const missing = [!token && "ZEPTOMAIL_TOKEN", !from && "ALERT_FROM_EMAIL"].filter(Boolean).join(" and ");
+    console.warn(`Email not sent (${missing} not set):`, email.subject);
+    return { ok: false, reason: `${missing} ${missing.includes(" and ") ? "aren't" : "isn't"} set on the server.` };
   }
   try {
     const res = await f(process.env.ZEPTOMAIL_API_URL || "https://api.zeptomail.com/v1.1/email", {
@@ -52,12 +61,24 @@ export async function sendEmail(email: Email, f: Fetch = fetch): Promise<boolean
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
-      console.error("ZeptoMail send failed", res.status, (await res.text().catch(() => "")).slice(0, 500));
-      return false;
+      const body = (await res.text().catch(() => "")).slice(0, 500);
+      console.error("ZeptoMail send failed", res.status, body);
+      return { ok: false, reason: `ZeptoMail refused it (HTTP ${res.status}): ${zeptoMessage(body)}` };
     }
-    return true;
+    return { ok: true };
   } catch (e) {
     console.error("ZeptoMail send failed", e);
-    return false;
+    return { ok: false, reason: "Couldn't reach ZeptoMail." };
+  }
+}
+
+/** The readable part of a ZeptoMail error response. */
+export function zeptoMessage(body: string): string {
+  try {
+    const j = JSON.parse(body);
+    const details = (j?.error?.details || []).map((d: { message?: string }) => d?.message).filter(Boolean);
+    return [j?.error?.message, ...details].filter(Boolean).join(" — ") || body.slice(0, 200);
+  } catch {
+    return body.slice(0, 200) || "no details";
   }
 }

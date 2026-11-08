@@ -242,6 +242,9 @@ export default function ShareSaleCard({
               ))}
           </ul>
         )}
+        <a href={`/dashboard/sales/${sale.id}/stats`} className="inline-block text-xs font-bold underline mt-2">
+          See all stats →
+        </a>
       </div>
     </div>
   );

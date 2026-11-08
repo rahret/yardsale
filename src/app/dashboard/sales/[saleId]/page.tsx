@@ -5,6 +5,7 @@ import { snapAiEnabled } from "@/lib/snapListServer";
 import SaleAdmin from "@/components/SaleAdmin";
 import { ITEM_SELECT } from "@/lib/utils";
 import { SELLER_ORDER_STATUSES } from "@/lib/liveUpdates";
+import { serverSetup } from "@/lib/serverSetup";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,7 @@ export default async function SaleAdminPage({
       access={accessFor(billing)}
       snapAi={snapAiEnabled()}
       otherSales={otherSales || []}
+      setup={serverSetup()}
     />
   );
 }

@@ -154,3 +154,16 @@ export function buyerHoldEmail(o: {
     footer: BUYER_FOOTER,
   });
 }
+
+/** The Account page's "send a test email" button. */
+export function testEmail(link: string): Rendered {
+  return render({
+    subject: "Test email from Yard Sale QR",
+    heading: "Your emails are working",
+    intro: "This is a test. Hold alerts and Buy Now alerts will reach this address, and buyers can get their confirmations.",
+    rows: [],
+    action: "Open your account",
+    link,
+    footer: FOOTER,
+  });
+}
