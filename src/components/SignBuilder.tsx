@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import SignSheet from "@/components/SignSheet";
+import { usePrintJob } from "@/components/usePrintJob";
+import { Chip, Row, Section, Segmented } from "@/components/BuilderControls";
 import {
   ARROW_NOTE_MAX,
   DEFAULT_DESIGN,
@@ -12,11 +14,8 @@ import {
   TITLE_PRESETS,
   normalizeDesign,
   signContent,
-  type BlockSize,
   type SignDesign,
 } from "@/lib/signDesign";
-
-const SIZE_LABELS: Record<BlockSize, string> = { off: "Off", s: "S", m: "M", l: "L" };
 
 /** Design and print yard signs for one sale: title, arrows, and how big the
  * QR code, address and dates are, with a live preview of the sheet. */
@@ -37,8 +36,11 @@ export default function SignBuilder({
 }) {
   const storageKey = `sign:${saleId}`;
   const [design, setDesign] = useState<SignDesign>(DEFAULT_DESIGN);
-  const [printRoot, setPrintRoot] = useState<HTMLElement | null>(null);
-  const [printing, setPrinting] = useState(false);
+  const { printRoot, printing, print } = usePrintJob(() => {
+    try {
+      localStorage.setItem(`checklist:${saleId}:printed`, "1");
+    } catch {}
+  });
 
   // the seller's last design for this sale (this device only)
   useEffect(() => {
@@ -48,13 +50,6 @@ export default function SignBuilder({
     } catch {
       // nothing saved, or storage blocked
     }
-    let el = document.getElementById("print-root");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "print-root";
-      document.body.appendChild(el);
-    }
-    setPrintRoot(el);
   }, [storageKey]);
 
   function update(patch: Partial<SignDesign>) {
@@ -65,30 +60,6 @@ export default function SignBuilder({
       } catch {}
       return next;
     });
-  }
-
-  useEffect(() => {
-    if (!printing) return;
-    // wait for web fonts so the fit-to-size text is measured with the real font
-    let t: ReturnType<typeof setTimeout> | undefined;
-    let cancelled = false;
-    (document.fonts?.ready ?? Promise.resolve()).then(() => {
-      if (!cancelled) t = setTimeout(() => window.print(), 80);
-    });
-    const done = () => setPrinting(false);
-    window.addEventListener("afterprint", done);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-      window.removeEventListener("afterprint", done);
-    };
-  }, [printing]);
-
-  function print() {
-    try {
-      localStorage.setItem(`checklist:${saleId}:printed`, "1");
-    } catch {}
-    setPrinting(true);
   }
 
   const content = signContent(design, sale, dateLines, categories);
@@ -278,8 +249,13 @@ export default function SignBuilder({
         printing &&
         createPortal(
           <>
-            <style>{`@media print { @page { size: letter ${design.orientation}; margin: 0.2in; } }`}</style>
-            <div className="hidden print:block w-full h-full">{sheet}</div>
+            {/* laid out off-screen at the printed size first, so the fit-to-size
+                text has measured its box before the print dialog snapshots it */}
+            <style>{`@media print { @page { size: letter ${design.orientation}; margin: 0.2in; } .sign-stage { width: 100%; height: 100%; } }
+@media screen { .sign-stage { position: fixed; left: -20000px; top: 0; width: ${landscape ? 10.6 : 8.1}in; height: ${landscape ? 8.1 : 10.6}in; } }`}</style>
+            <div className="sign-stage" aria-hidden>
+              {sheet}
+            </div>
           </>,
           printRoot
         )}
@@ -306,67 +282,6 @@ function Sheet({
       <div className="flex-1 min-h-0">{one}</div>
       <div className="border-t-2 border-dashed border-black/40" aria-hidden />
       <div className="flex-1 min-h-0">{one}</div>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs font-bold opacity-70 mb-1.5">{title}</div>
-      {children}
-    </div>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 mt-2">
-      <span className="text-xs opacity-60 w-16 shrink-0">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`px-2 py-1 rounded-full text-[11px] font-bold border-2 ${
-        active ? "bg-ink text-chalk border-ink" : "bg-white border-cardboard-dark/60"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Segmented<T extends string>({
-  value,
-  options,
-  labels,
-  onChange,
-}: {
-  value: T;
-  options: readonly T[];
-  labels?: Partial<Record<T, string>>;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="inline-flex rounded-lg border-2 border-cardboard-dark overflow-hidden text-xs font-bold" role="radiogroup">
-      {options.map((o) => (
-        <button
-          key={o}
-          type="button"
-          role="radio"
-          aria-checked={value === o}
-          onClick={() => onChange(o)}
-          className={`px-2.5 py-1.5 ${value === o ? "bg-ink text-chalk" : "bg-white"}`}
-        >
-          {labels?.[o] ?? SIZE_LABELS[o as BlockSize] ?? o}
-        </button>
-      ))}
     </div>
   );
 }

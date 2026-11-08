@@ -41,7 +41,7 @@ _Last updated: 2026-11-01_
     the house number is hidden), and server-side paging (24 at a time, Show more).
   - _Still to do:_ promoted listings (paid) — needs a price and checkout decision. Directory
     listing itself is now part of Pro / the Sale Pass.
-- 🟡 **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
+- ✅ **There's one sign layout.** Traditional signs work as a trail of arrows from busy roads.
   Add arrow signs ("← YARD SALE, 2 blocks") with a small QR code, plus a quarter-page flyer
   for neighborhood boards.
   - _Done (pending merge):_ **Sign builder** — title (presets or up to 16 characters), title
@@ -49,7 +49,9 @@ _Last updated: 2026-11-01_
     for the QR code, address and dates, an extra line (tagline, categories or custom), "Scan for
     photos & prices" under the QR code, landscape/portrait, two signs per sheet, one-tap
     presets, live preview; remembers the last design per sale.
-  - _Still to do:_ quarter-page flyer with item photos; printed price tags.
+  - _Done (pending merge):_ **Flyer** — 4 per sheet (quarter page, cut lines) or 1 per sheet;
+    title and colour, optional sale name, tagline, dates, address, top categories and QR code
+    (`?src=flyer`). No item photos — the QR code does the showing.
 - 🟡 **There's no "remind me".** Let buyers add the sale to their calendar, or follow it and get
   a message the morning it opens.
   - _Shipped in #16:_ "Add to calendar" button (an .ics file with each remaining sale
@@ -114,8 +116,12 @@ _Last updated: 2026-11-01_
     ~0.05¢ per photo, but weaker at pricing. Test both on 30–50 real photos.
   - _Open decisions:_ free vs. limited free vs. paid feature; which model; hidden drafts
     until approved (recommended yes).
-- ⬜ **There are no printed price tags.** Printing tag sheets that match the listing (and
+- ✅ **There are no printed price tags.** Printing tag sheets that match the listing (and
   optionally carry each item's QR code) ties the physical sale to the online one.
+  - _Done (pending merge):_ **Price tags** — pick items; Avery 5160/8160 (30 per sheet),
+    Avery 5163/8163 (10 per sheet) or plain paper cut apart (18 per sheet); name, price ("$2
+    each" for bulk lots, "FREE" for $0) and an optional QR code to the item (`?src=tag`);
+    start partway down a used label sheet.
 - ⬜ **Each sale starts from scratch.** Add "copy this sale" and "move unsold items to my next
   sale", plus multi-family sales with several sellers on one sale.
 - 🟡 **There are no numbers.** Sellers can't see page views, QR scans versus link visits,

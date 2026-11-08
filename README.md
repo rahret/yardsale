@@ -100,7 +100,7 @@ checked before they're saved:
   ready-to-paste posts (group post, Craigslist, text), and a downloadable square image.
   Buyers get "Share" on the sale and "Share this item" on each item; `?item=<id>` opens it.
 - **Visit counts:** shared links carry `?src=` (qr, facebook, group, craigslist, text,
-  email, share, friend). Each browser session's first visit is recorded in `sale_visits`
+  email, share, friend, directory, tag, flyer). Each browser session's first visit is recorded in `sale_visits`
   (no personal data; the seller's own visits are skipped) and shown to the seller by source.
 - `NEXT_PUBLIC_SITE_URL` should include `https://`; the app adds it if missing.
 
@@ -351,6 +351,23 @@ landscape or portrait, and one or two signs per sheet. Presets set up a main sig
 signs in one tap; the last design is remembered per sale on that device. Every size is a share
 of the page (`src/components/SignSheet.tsx`, `src/lib/signDesign.ts`), so the preview matches the
 printout on any paper size.
+
+## Price tags and flyers
+
+Next to the Sign builder in the Share card:
+
+- **🏷️ Price tags** (`/dashboard/sales/[id]/tags`) prints a tag per chosen item — name, price
+  (`$2 each` for bulk lots, `FREE` for $0) and an optional QR code that opens that item
+  (`?src=tag`). Paper: Avery 5160/8160 (30 per sheet), Avery 5163/8163 (10 per sheet), or plain
+  paper with dashed cut lines (18 per sheet). "Start at" skips labels already used on a sheet.
+- **📄 Flyer** (`/dashboard/sales/[id]/flyer`) prints 4 quarter-page flyers per sheet (cut
+  apart) or 1 full page: a title (same presets and colours as signs), and optionally the sale
+  name, tagline, dates, address, top categories and a QR code to the sale (`?src=flyer`).
+  No item photos.
+
+Label positions are kept in inches in `src/lib/printSheets.ts` and drawn as percentages of a
+Letter page printed with no margins, so the preview is the printout. Print at 100% scale with
+margins set to none, and test a sheet on plain paper against the labels first.
 
 ## Photos
 
