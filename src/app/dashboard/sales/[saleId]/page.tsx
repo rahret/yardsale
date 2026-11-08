@@ -68,6 +68,7 @@ export default async function SaleAdminPage({
     .select("id, name, status, created_at")
     .eq("owner_id", sale.owner_id)
     .neq("id", sale.id)
+    .is("archived_at", null)
     .order("created_at", { ascending: false });
 
   return (

@@ -271,6 +271,15 @@ alter table public.sales alter column listed set default true;
 alter table public.sales add column if not exists lat double precision;
 alter table public.sales add column if not exists lng double precision;
 
+-- archived sales are tucked away: hidden from the seller's sales list (they
+-- can show them again) and shown to buyers as over. Nothing is deleted, so
+-- orders, stats and items stay. Only a sale that isn't live can be archived;
+-- making an archived sale live again unarchives it (sales_unarchive_on_live).
+-- An archived sale still counts toward the trial's one sale.
+alter table public.sales add column if not exists archived_at timestamptz;
+alter table public.sales drop constraint if exists sales_archived_not_live;
+alter table public.sales add constraint sales_archived_not_live check (archived_at is null or status <> 'live');
+
 -- a sale-wide "Buy Now" switch was tried; Buy Now is now chosen per item
 -- (items.sell_mode)
 alter table public.sales drop column if exists buy_now_enabled;
@@ -949,6 +958,20 @@ create trigger sales_set_updated_at before update on public.sales
 drop trigger if exists items_set_updated_at on public.items;
 create trigger items_set_updated_at before update on public.items
   for each row execute procedure public.set_updated_at();
+
+create or replace function public.unarchive_on_live()
+returns trigger language plpgsql as $$
+begin
+  if new.status = 'live' then
+    new.archived_at := null;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists sales_unarchive_on_live on public.sales;
+create trigger sales_unarchive_on_live before update of status on public.sales
+  for each row execute procedure public.unarchive_on_live();
 
 -- ----------------------------------------------------------------------------
 -- sync_item_status: for bulk items (quantity_total > 1) the status is fully

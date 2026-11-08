@@ -383,6 +383,15 @@ The **♻️ Next sale** card at the bottom of a sale page:
   of the seller's sales. A part-sold bulk lot is split so the sold units and their revenue stay
   with the old sale.
 
+## Archiving a sale
+
+A sale that isn't live can be archived from its status card (`sales.archived_at`). It drops
+off the dashboard's list (a "Show archived sales" link brings it back), and its public link
+shows "This sale has ended" with a button to the seller's current live sale, or to Find yard
+sales. Nothing is deleted; Unarchive, or making the sale live again, restores it. Sales can't
+be deleted, which keeps Buy Now order records and printed QR codes intact. Archived sales
+still count toward the trial's one sale.
+
 ## Photos
 
 Photos are scaled in the browser to at most 1,600 px on the long side and saved as JPEG before

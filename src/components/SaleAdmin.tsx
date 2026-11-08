@@ -386,6 +386,16 @@ export default function SaleAdmin({
     if (!error) setSavedLocations((prev) => prev.filter((l) => l.id !== id));
   }
 
+  async function setArchived(archived: boolean) {
+    const { data, error } = await createClient()
+      .from("sales")
+      .update({ archived_at: archived ? new Date().toISOString() : null })
+      .eq("id", sale.id)
+      .select()
+      .single();
+    if (!error && data) setSale(data);
+  }
+
   async function setSaleStatus(status: SaleStatus) {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -610,7 +620,23 @@ export default function SaleAdmin({
       </a>
       <div className="font-marker text-3xl text-marker -rotate-1 mt-2 mb-5 break-words">{sale.name}</div>
 
-      {showChecklist && (
+      {sale.archived_at && (
+        <div className="bg-cardboard-dark/15 border-2 border-cardboard-dark rounded-xl p-3 mb-4 flex items-center gap-3 flex-wrap">
+          <div className="text-sm flex-1 min-w-[200px]">
+            <strong>🗄️ This sale is archived.</strong> It&apos;s hidden from your sales list, and buyers who open its
+            link see that it&apos;s over. Everything in it is kept.
+          </div>
+          <button
+            type="button"
+            onClick={() => setArchived(false)}
+            className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm"
+          >
+            Unarchive
+          </button>
+        </div>
+      )}
+
+      {showChecklist && !sale.archived_at && (
         <SaleChecklist steps={checklist} justCreated={justCreated} onDismiss={() => markDone("hidden")} />
       )}
 
@@ -648,6 +674,23 @@ export default function SaleAdmin({
           <a href="#next-sale" className="inline-block text-xs font-bold underline mt-2">
             Holding another sale? Start it from this one ↓
           </a>
+        )}
+        {!sale.archived_at && (
+          <div className="border-t border-cardboard-dark/30 mt-3 pt-3 flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setArchived(true)}
+              disabled={sale.status === "live"}
+              className="border-2 border-cardboard-dark bg-white font-bold px-4 py-2 rounded-lg text-sm disabled:opacity-40"
+            >
+              🗄️ Archive sale
+            </button>
+            <span className="text-xs opacity-60 flex-1 min-w-[200px]">
+              {sale.status === "live"
+                ? "End the sale first to archive it."
+                : "Tucks it away from your sales list; buyers who open the link see it's over. Nothing is deleted, and you can unarchive it any time."}
+            </span>
+          </div>
         )}
       </Card>
 
