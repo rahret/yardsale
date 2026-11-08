@@ -132,3 +132,32 @@ export const SNAP_LIMITS = {
   /** in total during the free trial (25 items, plus retakes) */
   trialTotal: 40,
 };
+
+/** Turns the sorting grid into listings, in the order the photos appear: each
+ * group's photos together (first photo = cover), and each ungrouped photo on
+ * its own. */
+export function listingsFromPhotos<T extends { group: string | null }>(photos: T[]): T[][] {
+  const out: T[][] = [];
+  const byGroup = new Map<string, T[]>();
+  for (const p of photos) {
+    if (!p.group) {
+      out.push([p]);
+      continue;
+    }
+    const existing = byGroup.get(p.group);
+    if (existing) existing.push(p);
+    else {
+      const list = [p];
+      byGroup.set(p.group, list);
+      out.push(list);
+    }
+  }
+  return out;
+}
+
+/** Group numbers (1, 2, …) in the order groups first appear in the grid. */
+export function groupNumbers(photos: { group: string | null }[]): Map<string, number> {
+  const numbers = new Map<string, number>();
+  for (const p of photos) if (p.group && !numbers.has(p.group)) numbers.set(p.group, numbers.size + 1);
+  return numbers;
+}

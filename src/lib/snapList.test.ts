@@ -92,3 +92,20 @@ describe("readSuggestion", () => {
     expect(readSuggestion(message({ content: [{ type: "text", text: "not json" }] as never }), []).suggestion).toBeNull();
   });
 });
+
+describe("photo groups", () => {
+  const p = (id: string, group: string | null = null) => ({ id, group });
+
+  it("makes one listing per group and per ungrouped photo, in grid order", async () => {
+    const { listingsFromPhotos } = await import("./snapList");
+    const photos = [p("a"), p("b", "g1"), p("c"), p("d", "g1"), p("e", "g2"), p("f", "g2")];
+    expect(listingsFromPhotos(photos).map((l) => l.map((x) => x.id))).toEqual([["a"], ["b", "d"], ["c"], ["e", "f"]]);
+    expect(listingsFromPhotos([])).toEqual([]);
+  });
+
+  it("numbers groups in the order they first appear", async () => {
+    const { groupNumbers } = await import("./snapList");
+    const n = groupNumbers([p("a"), p("b", "x"), p("c", "y"), p("d", "x")]);
+    expect([n.get("x"), n.get("y")]).toEqual([1, 2]);
+  });
+});

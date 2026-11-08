@@ -296,8 +296,11 @@ Setup:
 
 ## Snap & list (photo-first item entry, optional AI)
 
-In the **Add an item** card, sellers take or choose photos one after another; each is shrunk,
-uploaded to the sale's `snap/` folder and becomes an item card to fill in (name, price with
+In the **Add an item** card, sellers take or choose photos one after another. The photos land in
+a **sorting grid**: tap several photos of one item and **Group photos** (each group gets a
+numbered colour badge), **Ungroup** or **Remove** selected photos, **Cancel** to throw the grid
+away, or **Done**. Each group — and each photo on its own — then becomes one item card (photos
+shrunk and uploaded to the sale's `snap/` folder; the first photo is the cover) to fill in (name, price with
 quick buttons, category with quick picks, "Sell as a bulk lot" with a quantity, and "How buyers
 get it" — First come, first served / Hold / Buy Now, with the same plan and payout rules as the
 add-item form; new cards start with the last choice). **AI suggestions are optional:** with
