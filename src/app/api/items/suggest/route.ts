@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { accessFor } from "@/lib/billing";
 import { publicPhotoUrl } from "@/lib/share";
 import { SNAP_LIMITS, costUsd } from "@/lib/snapList";
-import { getAnthropic, snapModel, suggestListing } from "@/lib/snapListServer";
+import { getAnthropic, snapAiEnabled, snapModel, suggestListing } from "@/lib/snapListServer";
 
 // Snap & list: the seller has uploaded a photo to their sale's folder; this
 // asks Claude for a suggested listing (name, category, price, description).
@@ -20,9 +20,9 @@ export async function POST(request: NextRequest) {
   } = await createClient().auth.getUser();
   if (!user) return fail("You're signed out — refresh the page and log in again.", 401);
 
-  const anthropic = getAnthropic();
+  const anthropic = snapAiEnabled() ? getAnthropic() : null;
   const admin = createAdminClient();
-  if (!anthropic || !admin) return fail("Snap & list isn't switched on for this site yet.", 503);
+  if (!anthropic || !admin) return fail("Suggestions aren't switched on — fill this one in yourself.", 503);
 
   const body = await request.json().catch(() => null);
   const saleId = typeof body?.saleId === "string" ? body.saleId : "";

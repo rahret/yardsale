@@ -294,11 +294,14 @@ Setup:
      Zoho account is outside the US data centre (e.g. `https://api.zeptomail.eu/v1.1/email`)
 4. Re-run `supabase/schema.sql` (adds `email_alerts` and the `seller_notified_at` columns).
 
-## Snap & list (AI item entry)
+## Snap & list (photo-first item entry, optional AI)
 
-In the **Add an item** card, sellers take or choose photos; each is shrunk, uploaded to the
-sale's `snap/` folder and sent to Claude, which suggests a name, category, price and short
-description (`/api/items/suggest`). The seller reviews each suggestion (quick price buttons:
+In the **Add an item** card, sellers take or choose photos one after another; each is shrunk,
+uploaded to the sale's `snap/` folder and becomes an item card to fill in (name, price with
+quick buttons, category with quick picks). **AI suggestions are optional:** with
+`ANTHROPIC_API_KEY` set (and `SNAP_LIST_AI` not `off`), each photo is also sent to Claude, which
+fills in a suggested name, category, price and short description (`/api/items/suggest`).
+Without the key, the flow works the same and sellers type the details. The seller reviews each suggestion (quick price buttons:
 −$1, +$1, $1, $5, $10, $20) and adds it, or adds them all at once. Nothing becomes an item until
 the seller adds it; unreviewed drafts are kept on that device. Trial sellers can use it.
 
@@ -319,7 +322,7 @@ Setup:
 2. In Vercel, set `ANTHROPIC_API_KEY` (and optionally `SNAP_LIST_MODEL`), then redeploy.
 3. Re-run `supabase/schema.sql` (adds `ai_suggestions`).
 
-Without the key, the panel says Snap & list isn't switched on yet.
+Without the key (or with `SNAP_LIST_AI=off`), Snap & list runs without AI.
 
 **Comparing models on your own photos:** put 30–50 item photos (JPEG) in a folder and run
 

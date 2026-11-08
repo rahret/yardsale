@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { shrinkImage } from "@/lib/shrinkImage";
 import { photoUrl } from "@/components/PhotoUploader";
-import { PRICE_PRESETS, PRICE_STEPS, nudgePrice, type SnapSuggestion } from "@/lib/snapList";
+import { COMMON_CATEGORIES, PRICE_PRESETS, PRICE_STEPS, nudgePrice, type SnapSuggestion } from "@/lib/snapList";
 import { ITEM_SELECT, friendlyDbError, money } from "@/lib/utils";
 import type { Item } from "@/lib/types";
 
@@ -45,12 +45,18 @@ export default function SnapList({
   itemCount,
   itemLimit,
   onAdded,
+  ai,
+  categories,
 }: {
   saleId: string;
   itemCount: number;
   /** Items still allowed (the trial's 25), or null for no limit. */
   itemLimit: number | null;
   onAdded: (item: Item) => void;
+  /** Ask Claude for suggestions; without it the seller fills each card in. */
+  ai: boolean;
+  /** The sale's existing categories, offered as quick picks. */
+  categories: string[];
 }) {
   const storageKey = `snap:${saleId}`;
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -125,6 +131,7 @@ export default function SnapList({
         cacheControl: "3600",
       });
       if (error) return patch(id, { status: "error", error: friendlyDbError(error.message) });
+      if (!ai) return patch(id, { path, status: "ready" });
       patch(id, { path, status: "thinking" });
       await suggest(id, path);
     } catch {
@@ -200,6 +207,7 @@ export default function SnapList({
 
   const busy = drafts.filter((d) => d.status === "uploading" || d.status === "thinking").length;
   const readyCount = drafts.filter((d) => d.status === "ready" && d.name.trim() && !d.error).length;
+  const unnamed = drafts.filter((d) => d.status === "ready" && !d.name.trim()).length;
   const full = itemLimit !== null && itemCount >= itemLimit;
   const btn = "border-2 border-cardboard-dark bg-white font-bold px-2 py-1 rounded-lg text-xs";
 
@@ -209,8 +217,9 @@ export default function SnapList({
         <div>
           <div className="font-bold text-sm">📸 Snap &amp; list</div>
           <div className="text-xs opacity-70">
-            Photograph items one after another — we suggest a name, category and price for each. You check them before
-            they&apos;re added.
+            {ai
+              ? "Photograph items one after another — we suggest a name, category and price for each. You check them before they're added."
+              : "Photograph items one after another, then give each a name and price — every photo becomes an item card."}
           </div>
         </div>
         <div className="flex gap-2">
@@ -250,12 +259,24 @@ export default function SnapList({
         />
       </div>
 
+      <datalist id="snap-categories">
+        {Array.from(new Set([...categories, ...COMMON_CATEGORIES])).map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+
       {drafts.length > 0 && (
         <>
           <div className="flex items-center justify-between gap-2 mt-3 flex-wrap">
             <div className="text-xs font-semibold opacity-70" aria-live="polite">
               {busy > 0 ? `Working on ${busy} photo${busy === 1 ? "" : "s"}… ` : ""}
-              {readyCount > 0 ? `${readyCount} ready to review` : ""}
+              {ai
+                ? readyCount > 0
+                  ? `${readyCount} ready to review`
+                  : ""
+                : [readyCount > 0 ? `${readyCount} ready` : "", unnamed > 0 ? `${unnamed} need${unnamed === 1 ? "s" : ""} a name` : ""]
+                    .filter(Boolean)
+                    .join(" · ")}
             </div>
             {readyCount > 1 && (
               <button type="button" onClick={addAll} disabled={full} className="bg-ink text-chalk font-bold px-3 py-1.5 rounded-lg text-xs disabled:opacity-50">
@@ -339,7 +360,7 @@ function DraftCard({
               ))}
             </div>
             <div className="grid grid-cols-[1fr_auto] gap-1.5 mt-1.5">
-              <input value={d.category} onChange={(e) => onChange({ category: e.target.value })} placeholder="Category" className={input} aria-label="Category" />
+              <input value={d.category} onChange={(e) => onChange({ category: e.target.value })} placeholder="Category" className={input} aria-label="Category" list="snap-categories" />
               {d.quantity > 1 && <span className="text-xs font-bold self-center">× {d.quantity} (bulk)</span>}
             </div>
             <textarea

@@ -3,6 +3,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { DEFAULT_SNAP_MODEL } from "./snapList";
 import { readSuggestion, suggestionRequest, type SuggestResult } from "./snapListRequest";
 
+/** Whether Snap & list suggests listings with Claude: on when ANTHROPIC_API_KEY
+ * is set, unless SNAP_LIST_AI=off. Without it, Snap & list still works as a
+ * photo-first flow where the seller fills in each card. */
+export function snapAiEnabled(): boolean {
+  return !!process.env.ANTHROPIC_API_KEY && process.env.SNAP_LIST_AI?.trim().toLowerCase() !== "off";
+}
+
 /** The Claude client for Snap & list, or null when ANTHROPIC_API_KEY isn't
  * set (the feature then says it's unavailable instead of failing). */
 export function getAnthropic(): Anthropic | null {

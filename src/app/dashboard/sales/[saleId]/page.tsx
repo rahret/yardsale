@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { accessFor } from "@/lib/billing";
+import { snapAiEnabled } from "@/lib/snapListServer";
 import SaleAdmin from "@/components/SaleAdmin";
 import { ITEM_SELECT } from "@/lib/utils";
 
@@ -72,6 +73,7 @@ export default async function SaleAdminPage({
       initialOrders={orders || []}
       justCreated={searchParams.welcome === "1"}
       access={accessFor(billing)}
+      snapAi={snapAiEnabled()}
     />
   );
 }

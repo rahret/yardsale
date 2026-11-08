@@ -95,7 +95,9 @@ _Last updated: 2026-11-01_
 - ⬜ **Adding items is slow.** Typing in 80 items is the biggest reason sellers will give up. A
   photo-first flow would help: snap photos in a row and fill in each item from the photo,
   with AI suggesting a name, category and price.
-  - _Done (pending merge):_ **Snap & list** — take/choose photos, Claude suggests name,
+  - _Done (pending merge):_ **Snap & list** — photo-first: take/choose photos and each becomes
+    an item card to name and price (works now, no AI needed). With an Anthropic key, Claude
+    also suggests name,
     category, price, description and quantity; review with price buttons, add one or all.
     Trial sellers included (40 suggestions). Per-day and trial limits, usage/cost log,
     `npm run compare-snap` to compare models on your own photos. Model is a setting

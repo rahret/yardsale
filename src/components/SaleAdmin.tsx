@@ -63,6 +63,7 @@ export default function SaleAdmin({
   initialOrders = [],
   justCreated = false,
   access = "full",
+  snapAi = false,
 }: {
   sale: Sale;
   initialItems: Item[];
@@ -77,6 +78,8 @@ export default function SaleAdmin({
   justCreated?: boolean;
   /** What the seller's plan allows (see lib/billing). */
   access?: Access;
+  /** Snap & list suggests listings with AI (otherwise the seller fills them in). */
+  snapAi?: boolean;
 }) {
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
@@ -978,6 +981,8 @@ export default function SaleAdmin({
             saleId={sale.id}
             itemCount={items.length}
             itemLimit={access === "trial" ? TRIAL_LIMITS.items : null}
+            ai={snapAi}
+            categories={Array.from(new Set(items.map((i) => i.category?.trim()).filter(Boolean) as string[]))}
             onAdded={(item) => setItems((prev) => [item, ...prev])}
           />
         )}
