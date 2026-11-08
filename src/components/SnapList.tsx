@@ -6,7 +6,8 @@ import { shrinkImage } from "@/lib/shrinkImage";
 import { photoUrl } from "@/components/PhotoUploader";
 import { COMMON_CATEGORIES, PRICE_PRESETS, PRICE_STEPS, nudgePrice, type SnapSuggestion } from "@/lib/snapList";
 import { ITEM_SELECT, friendlyDbError, money } from "@/lib/utils";
-import type { Item } from "@/lib/types";
+import type { Item, SellMode } from "@/lib/types";
+import SellModePicker, { sellModeError } from "@/components/SellModePicker";
 
 const BUCKET = "item-photos";
 /** Photos sent to Claude at the same time. */
@@ -26,7 +27,11 @@ interface Draft {
   price: string;
   category: string;
   description: string;
+  /** A bulk lot of identical items (always first come, first served). */
+  isBulk: boolean;
   quantity: number;
+  /** How buyers get it (single items only). */
+  sellMode: SellMode;
   issue?: SnapSuggestion["issue"];
   confidence?: SnapSuggestion["confidence"];
 }
@@ -47,6 +52,8 @@ export default function SnapList({
   onAdded,
   ai,
   categories,
+  payoutsReady,
+  premium,
 }: {
   saleId: string;
   itemCount: number;
@@ -57,11 +64,17 @@ export default function SnapList({
   ai: boolean;
   /** The sale's existing categories, offered as quick picks. */
   categories: string[];
+  /** The seller can take card payments (Buy Now). */
+  payoutsReady: boolean;
+  /** The seller's plan includes Holds and Buy Now. */
+  premium: boolean;
 }) {
   const storageKey = `snap:${saleId}`;
   const [drafts, setDrafts] = useState<Draft[]>([]);
   // photos waiting their turn, worked through a few at a time
   const queue = useRef<{ id: string; file: File }[]>([]);
+  // new cards start with the "how buyers get it" the seller last picked
+  const lastMode = useRef<SellMode>("in_person");
   const running = useRef(0);
   const cameraRef = useRef<HTMLInputElement>(null);
   const pickRef = useRef<HTMLInputElement>(null);
@@ -73,7 +86,9 @@ export default function SnapList({
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || "[]") as Draft[];
       if (Array.isArray(saved)) {
-        const restored = saved.filter((d) => d.path && d.status === "ready");
+        const restored = saved
+          .filter((d) => d.path && d.status === "ready")
+          .map((d) => ({ ...d, isBulk: d.isBulk ?? d.quantity > 1, sellMode: d.sellMode ?? "in_person" }));
         setDrafts((ds) => [...restored.filter((r) => !ds.some((d) => d.id === r.id)), ...ds]);
       }
     } catch {}
@@ -104,7 +119,9 @@ export default function SnapList({
         price: "",
         category: "",
         description: "",
+        isBulk: false,
         quantity: 1,
+        sellMode: lastMode.current,
       })),
     ]);
     queue.current.push(...added);
@@ -162,6 +179,7 @@ export default function SnapList({
       category: s.category,
       description: s.description,
       quantity: s.quantity,
+      isBulk: s.quantity > 1,
       issue: s.issue,
       confidence: s.confidence,
     });
@@ -169,9 +187,13 @@ export default function SnapList({
 
   async function add(d: Draft) {
     if (!d.name.trim()) return patch(d.id, { error: "Give it a name first." });
+    // bulk lots are always first come, first served (as in the add-item form)
+    const sellMode: SellMode = d.isBulk ? "in_person" : d.sellMode;
+    const modeError = sellModeError(sellMode, d.price, payoutsReady, premium);
+    if (modeError) return patch(d.id, { error: modeError });
     patch(d.id, { status: "adding", error: undefined });
     const supabase = createClient();
-    const quantity = Math.max(1, d.quantity || 1);
+    const quantity = d.isBulk ? Math.max(2, Math.round(d.quantity) || 2) : 1;
     const { data: item, error } = await supabase
       .from("items")
       .insert({
@@ -183,7 +205,7 @@ export default function SnapList({
         icon: "📦",
         quantity_total: quantity,
         quantity_available: quantity,
-        sell_mode: "in_person",
+        sell_mode: sellMode,
       })
       .select("id")
       .single();
@@ -286,7 +308,19 @@ export default function SnapList({
           </div>
           <div className="grid gap-3 mt-2">
             {drafts.map((d) => (
-              <DraftCard key={d.id} d={d} onChange={(p) => patch(d.id, p)} onAdd={() => add(d)} onDiscard={() => discard(d)} disabled={full} />
+              <DraftCard
+                key={d.id}
+                d={d}
+                onChange={(p) => {
+                  if (p.sellMode) lastMode.current = p.sellMode;
+                  patch(d.id, p);
+                }}
+                onAdd={() => add(d)}
+                onDiscard={() => discard(d)}
+                disabled={full}
+                payoutsReady={payoutsReady}
+                premium={premium}
+              />
             ))}
           </div>
         </>
@@ -306,12 +340,16 @@ function DraftCard({
   onAdd,
   onDiscard,
   disabled,
+  payoutsReady,
+  premium,
 }: {
   d: Draft;
   onChange: (p: Partial<Draft>) => void;
   onAdd: () => void;
   onDiscard: () => void;
   disabled: boolean;
+  payoutsReady: boolean;
+  premium: boolean;
 }) {
   const src = d.preview || (d.path ? photoUrl(d.path) : undefined);
   const working = d.status === "uploading" || d.status === "thinking";
@@ -359,10 +397,52 @@ function DraftCard({
                 </button>
               ))}
             </div>
-            <div className="grid grid-cols-[1fr_auto] gap-1.5 mt-1.5">
-              <input value={d.category} onChange={(e) => onChange({ category: e.target.value })} placeholder="Category" className={input} aria-label="Category" list="snap-categories" />
-              {d.quantity > 1 && <span className="text-xs font-bold self-center">× {d.quantity} (bulk)</span>}
-            </div>
+            <input
+              value={d.category}
+              onChange={(e) => onChange({ category: e.target.value })}
+              placeholder="Category"
+              className={`${input} mt-1.5`}
+              aria-label="Category"
+              list="snap-categories"
+            />
+            <label className="flex items-center gap-2 text-xs font-bold opacity-80 mt-2">
+              <input
+                type="checkbox"
+                checked={d.isBulk}
+                onChange={(e) =>
+                  onChange({ isBulk: e.target.checked, quantity: e.target.checked ? Math.max(2, d.quantity) : 1, error: undefined })
+                }
+              />
+              Sell as a bulk lot (several identical items, e.g. 20 books)
+            </label>
+            {d.isBulk ? (
+              <div className="flex items-center gap-2 mt-1.5 mb-1">
+                <label className="text-xs font-bold opacity-70" htmlFor={`qty-${d.id}`}>
+                  How many
+                </label>
+                <input
+                  id={`qty-${d.id}`}
+                  type="number"
+                  min={2}
+                  value={d.quantity}
+                  onChange={(e) => onChange({ quantity: Number(e.target.value) || 0 })}
+                  className="w-20 px-2 py-1.5 border-2 border-cardboard-dark rounded-lg text-sm"
+                />
+              </div>
+            ) : null}
+            {d.isBulk ? (
+              <div className="text-[11px] opacity-60 mb-1">Bulk lots are first come, first served; the price is for one.</div>
+            ) : (
+              <div className="mt-2">
+                <SellModePicker
+                  value={d.sellMode}
+                  onChange={(sellMode) => onChange({ sellMode, error: undefined })}
+                  payoutsReady={payoutsReady}
+                  premium={premium}
+                  price={d.price}
+                />
+              </div>
+            )}
             <textarea
               value={d.description}
               onChange={(e) => onChange({ description: e.target.value })}

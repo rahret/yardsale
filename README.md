@@ -298,7 +298,9 @@ Setup:
 
 In the **Add an item** card, sellers take or choose photos one after another; each is shrunk,
 uploaded to the sale's `snap/` folder and becomes an item card to fill in (name, price with
-quick buttons, category with quick picks). **AI suggestions are optional:** with
+quick buttons, category with quick picks, "Sell as a bulk lot" with a quantity, and "How buyers
+get it" — First come, first served / Hold / Buy Now, with the same plan and payout rules as the
+add-item form; new cards start with the last choice). **AI suggestions are optional:** with
 `ANTHROPIC_API_KEY` set (and `SNAP_LIST_AI` not `off`), each photo is also sent to Claude, which
 fills in a suggested name, category, price and short description (`/api/items/suggest`).
 Without the key, the flow works the same and sellers type the details. The seller reviews each suggestion (quick price buttons:
