@@ -17,6 +17,7 @@ import NextSaleCard, { type OtherSale } from "@/components/NextSaleCard";
 import { removeUnusedPhotoFiles } from "@/lib/photoFiles";
 import { useSaleLive } from "@/components/useSaleLive";
 import ActiveHolds from "@/components/ActiveHolds";
+import { ChevronIcon, ChevronPairIcon } from "@/components/ChevronIcons";
 import type { ServerSetup } from "@/lib/serverSetup";
 import { SELLER_ORDER_STATUSES, newHolds, newPaidOrders } from "@/lib/liveUpdates";
 import { HOUR_OPTIONS, toHour } from "@/lib/hours";
@@ -763,22 +764,22 @@ export default function SaleAdmin({
         📊 See all stats — visits, where buyers came from, most viewed items
       </a>
 
-      <div className="flex justify-end gap-3 mb-2 text-xs font-bold">
+      <div className="flex justify-end gap-4 mb-2 text-xs font-bold">
         <button
           type="button"
           onClick={() => setCollapsed(new Set())}
           disabled={collapsed.size === 0}
-          className="underline disabled:no-underline disabled:opacity-40"
+          className="flex items-center gap-1 underline disabled:no-underline disabled:opacity-40"
         >
-          Expand all
+          <ChevronPairIcon apart /> Expand all
         </button>
         <button
           type="button"
           onClick={() => setCollapsed(new Set(SECTION_IDS))}
           disabled={collapsed.size === SECTION_IDS.length}
-          className="underline disabled:no-underline disabled:opacity-40"
+          className="flex items-center gap-1 underline disabled:no-underline disabled:opacity-40"
         >
-          Collapse all
+          <ChevronPairIcon apart={false} /> Collapse all
         </button>
       </div>
 
@@ -1606,8 +1607,8 @@ function Card({ title, id, children }: { title: string; id: string; children: Re
           className="w-full flex items-center justify-between gap-2 text-left"
         >
           <span>{title}</span>
-          <span aria-hidden className={`text-xs opacity-60 transition-transform ${open ? "" : "-rotate-90"}`}>
-            ▼
+          <span className="opacity-75 shrink-0">
+            <ChevronIcon up={open} />
           </span>
         </button>
       </h3>
