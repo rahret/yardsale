@@ -4,7 +4,8 @@ import { renderPreviewImage } from "@/lib/previewImage";
 
 // Link-preview image for a sale (?item=<id> for one item, ?size=square for
 // the 1080×1080 download, ?download=1 to save it as a file).
-export async function GET(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function GET(request: NextRequest, { params: paramsIn }: { params: Promise<{ slug: string }> }) {
+  const params = await paramsIn;
   const data = await loadPublicSale(params.slug);
   if (!data || data.sale.status === "draft") return new Response("Not found", { status: 404 });
 

@@ -9,14 +9,12 @@ import { serverSetup } from "@/lib/serverSetup";
 
 export const dynamic = "force-dynamic";
 
-export default async function SaleAdminPage({
-  params,
-  searchParams,
-}: {
-  params: { saleId: string };
-  searchParams: { welcome?: string };
+export default async function SaleAdminPage(props: {
+  params: Promise<{ saleId: string }>;
+  searchParams: Promise<{ welcome?: string }>;
 }) {
-  const supabase = createClient();
+  const [params, searchParams] = await Promise.all([props.params, props.searchParams]);
+  const supabase = await createClient();
 
   const {
     data: { user },

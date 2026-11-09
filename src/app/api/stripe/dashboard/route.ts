@@ -7,12 +7,12 @@ import { requestOrigin } from "@/lib/saleData";
 // "View payouts" on the Account page: a one-time login link to the seller's
 // Stripe Express dashboard (balance, payouts, bank details).
 export async function POST() {
-  const origin = requestOrigin();
+  const origin = await requestOrigin();
   const stripe = getStripe();
   const admin = createAdminClient();
   const {
     data: { user },
-  } = await createClient().auth.getUser();
+  } = await (await createClient()).auth.getUser();
   if (!stripe || !admin || !user) return NextResponse.redirect(`${origin}/dashboard/account`, { status: 303 });
 
   const { data: billing } = await admin

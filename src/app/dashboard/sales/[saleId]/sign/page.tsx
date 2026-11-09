@@ -9,8 +9,9 @@ import type { Item, SaleDay } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 // The sign builder for one of the seller's sales.
-export default async function SignPage({ params }: { params: { saleId: string } }) {
-  const supabase = createClient();
+export default async function SignPage({ params: paramsIn }: { params: Promise<{ saleId: string }> }) {
+  const params = await paramsIn;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -29,7 +30,7 @@ export default async function SignPage({ params }: { params: { saleId: string } 
     <SignBuilder
       saleId={sale.id}
       saleName={sale.name}
-      qrUrl={saleLink(requestOrigin(), sale.slug, { src: "qr" })}
+      qrUrl={saleLink(await requestOrigin(), sale.slug, { src: "qr" })}
       sale={{ street: sale.street || "", city: sale.city || "", state: sale.state || "", tagline: sale.tagline }}
       dateLines={dateLines}
       categories={topCategories((items || []) as Item[], 3)}

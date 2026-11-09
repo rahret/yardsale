@@ -3,12 +3,11 @@ import AccountSettings from "@/components/AccountSettings";
 
 export const dynamic = "force-dynamic";
 
-export default async function AccountPage({
-  searchParams,
-}: {
-  searchParams: { stripe?: string; detail?: string; billing?: string };
+export default async function AccountPage(props: {
+  searchParams: Promise<{ stripe?: string; detail?: string; billing?: string }>;
 }) {
-  const supabase = createClient();
+  const searchParams = await props.searchParams;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

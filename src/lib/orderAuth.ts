@@ -5,7 +5,7 @@ import type { Order } from "@/lib/types";
 /** The order, if it belongs to one of the signed-in seller's sales (RLS on
  * orders only lets owners read their own). */
 export async function ownedOrder(orderId: string): Promise<Order | null> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

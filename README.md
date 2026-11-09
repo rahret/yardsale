@@ -4,7 +4,7 @@ A full multi-user garage sale platform: anyone can create an account, build one 
 garage sales, add items with photos, and share a mobile-friendly page (with a QR code)
 where buyers browse, filter, and place time-limited reservations — all in real time.
 
-Built with **Next.js 14 (App Router)** + **Supabase** (Postgres database, auth, and file
+Built with **Next.js 15 (App Router, React 19)** + **Supabase** (Postgres database, auth, and file
 storage). Styling is Tailwind CSS using the cardboard-tag/marker aesthetic from the
 original prototype.
 
@@ -457,6 +457,9 @@ variables ticked for "Preview".
   `nosniff`, a strict referrer policy, and only the browser features the app uses.
   The unused `/_next/image` optimiser accepts no remote images.
 - Secrets are never committed: `.env.local` is git-ignored; `.env.example` lists the settings.
+- Dependencies: Next.js 15.5 and React 19, with `npm audit --omit=dev` at 0 known
+  vulnerabilities (build-only packages are pinned to patched versions under `overrides` in
+  `package.json`). Needs Node.js 20.9 or newer (for `sharp`).
 - Rate limits (counted in the database, keyed by a hash of the IP or user id, never the raw
   address; `src/lib/rateLimit.ts`, `private.hit`): Buy Now checkouts 15/hour per visitor,
   hold alert calls 30/hour, place lookups 30/min, directory searches 120/min, address checks

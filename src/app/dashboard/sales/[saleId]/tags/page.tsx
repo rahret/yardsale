@@ -7,8 +7,9 @@ import { saleLink } from "@/lib/share";
 export const dynamic = "force-dynamic";
 
 // Printable price tags for one of the seller's sales.
-export default async function TagsPage({ params }: { params: { saleId: string } }) {
-  const supabase = createClient();
+export default async function TagsPage({ params: paramsIn }: { params: Promise<{ saleId: string }> }) {
+  const params = await paramsIn;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -24,7 +25,7 @@ export default async function TagsPage({ params }: { params: { saleId: string } 
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
-  const origin = requestOrigin();
+  const origin = await requestOrigin();
   return (
     <TagsBuilder
       saleId={sale.id}

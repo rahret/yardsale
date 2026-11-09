@@ -13,13 +13,11 @@ export const dynamic = "force-dynamic";
 
 // Where Stripe Checkout sends the buyer after paying: shows the pickup code.
 // The Checkout session id in the URL is the buyer's proof of purchase.
-export default async function OrderPage({
-  params,
-  searchParams,
-}: {
-  params: { slug: string };
-  searchParams: { session_id?: string };
+export default async function OrderPage(props: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ session_id?: string }>;
 }) {
+  const [params, searchParams] = await Promise.all([props.params, props.searchParams]);
   const admin = createAdminClient();
   const stripe = getStripe();
   const sessionId = searchParams.session_id;

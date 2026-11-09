@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     .single();
   if (orderError || !order) return unavailable("Couldn't start checkout — try again.", 500);
 
-  const origin = requestOrigin();
+  const origin = await requestOrigin();
   const photo = [...(item.item_photos || [])].sort((a, b) => a.position - b.position)[0];
   try {
     const session = await stripe.checkout.sessions.create(

@@ -3,7 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ownedOrder } from "@/lib/orderAuth";
 
 // Seller marks a paid order as picked up (after checking the pickup code).
-export async function POST(_request: Request, { params }: { params: { orderId: string } }) {
+export async function POST(_request: Request, { params: paramsIn }: { params: Promise<{ orderId: string }> }) {
+  const params = await paramsIn;
   const order = await ownedOrder(params.orderId);
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
   if (order.status !== "paid") return NextResponse.json({ error: "Only paid orders can be picked up" }, { status: 400 });
