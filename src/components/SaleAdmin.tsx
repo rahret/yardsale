@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase/client";
@@ -11,12 +11,13 @@ import PhotoUploader, { photoUrl } from "@/components/PhotoUploader";
 import ShareSaleCard from "@/components/ShareSaleCard";
 import SnapList from "@/components/SnapList";
 import SellModePicker, { SELL_MODE_LABELS, sellModeError } from "@/components/SellModePicker";
-import BuyNowCard from "@/components/BuyNowCard";
+import BuyNowCard, { BuyNowIntro } from "@/components/BuyNowCard";
 import SaleChecklist, { type ChecklistStep } from "@/components/SaleChecklist";
 import NextSaleCard, { type OtherSale } from "@/components/NextSaleCard";
 import { removeUnusedPhotoFiles } from "@/lib/photoFiles";
 import { useSaleLive } from "@/components/useSaleLive";
 import ActiveHolds from "@/components/ActiveHolds";
+import { ChevronIcon, ChevronPairIcon } from "@/components/ChevronIcons";
 import type { ServerSetup } from "@/lib/serverSetup";
 import { SELLER_ORDER_STATUSES, newHolds, newPaidOrders } from "@/lib/liveUpdates";
 import { HOUR_OPTIONS, toHour } from "@/lib/hours";
@@ -96,6 +97,44 @@ export default function SaleAdmin({
   const [sale, setSale] = useState<Sale>(initialSale);
   const [items, setItems] = useState<Item[]>(initialItems);
   const [orders, setOrders] = useState<Order[]>(initialOrders);
+  // which sections are collapsed: in memory only, so a reload (or coming from
+  // another page) shows every section expanded again
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const sections = useMemo(
+    () => ({
+      collapsed,
+      toggle: (key: string) =>
+        setCollapsed((prev) => {
+          const next = new Set(prev);
+          if (next.has(key)) next.delete(key);
+          else next.add(key);
+          return next;
+        }),
+    }),
+    [collapsed]
+  );
+  // a link to a section (checklist buttons, "#next-sale", email links) opens it
+  useEffect(() => {
+    const open = (id: string) =>
+      setCollapsed((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement | null)?.closest?.('a[href^="#"]');
+      const id = a?.getAttribute("href")?.slice(1);
+      if (id) open(id);
+    };
+    const onHash = () => window.location.hash && open(window.location.hash.slice(1));
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("hashchange", onHash);
+    return () => {
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("hashchange", onHash);
+    };
+  }, []);
   // buyer activity that arrived while the page is open (live updates)
   const [alerts, setAlerts] = useState<{ id: string; text: string }[]>([]);
   const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
@@ -672,6 +711,7 @@ export default function SaleAdmin({
   }
 
   return (
+    <SectionsContext.Provider value={sections}>
     <div className="p-5 pb-20">
       <a href="/dashboard" className="text-sm font-semibold opacity-70">
         ← All sales
@@ -724,6 +764,25 @@ export default function SaleAdmin({
         📊 See all stats — visits, where buyers came from, most viewed items
       </a>
 
+      <div className="flex justify-end gap-4 mb-2 text-xs font-bold">
+        <button
+          type="button"
+          onClick={() => setCollapsed(new Set())}
+          disabled={collapsed.size === 0}
+          className="flex items-center gap-1 underline disabled:no-underline disabled:opacity-40"
+        >
+          <ChevronPairIcon apart /> Expand all
+        </button>
+        <button
+          type="button"
+          onClick={() => setCollapsed(new Set(SECTION_IDS))}
+          disabled={collapsed.size === SECTION_IDS.length}
+          className="flex items-center gap-1 underline disabled:no-underline disabled:opacity-40"
+        >
+          <ChevronPairIcon apart={false} /> Collapse all
+        </button>
+      </div>
+
       {/* status */}
       <Card title="🚦 Sale status" id="status">
         <div className="flex gap-2 flex-wrap">
@@ -769,7 +828,7 @@ export default function SaleAdmin({
       </Card>
 
       {/* note to buyers */}
-      <Card title="📣 Note to buyers">
+      <Card title="📣 Note to buyers" id="note">
         <div className="text-xs opacity-60 mb-2">
           Shown at the top of your sale page. Change it any time, e.g. &ldquo;Everything half off after noon&rdquo;.
         </div>
@@ -804,6 +863,7 @@ export default function SaleAdmin({
 
       {/* online payments */}
       <Card title="✋ Holds & 💳 Buy Now orders" id="orders">
+        <BuyNowIntro payoutsReady={payoutsReady} serverReady={setup.paymentsMissing.length === 0} />
         {!premium && (
           <div className="mb-3">
             <UpgradeNote>
@@ -820,14 +880,10 @@ export default function SaleAdmin({
           onExpired={liveRefresh}
         />
         <div className="border-t border-cardboard-dark/30 my-4" />
-        <div className="text-xs font-bold opacity-70 mb-1.5">💳 Buy Now (online payments)</div>
         <BuyNowCard
-          sale={sale}
-          payoutsReady={payoutsReady}
           orders={orders}
           onOrderUpdated={(o) => setOrders((prev) => prev.map((p) => (p.id === o.id ? o : p)))}
           onItemsChanged={reloadItems}
-          serverReady={setup.paymentsMissing.length === 0}
         />
       </Card>
 
@@ -1508,6 +1564,7 @@ export default function SaleAdmin({
           printRoot
         )}
     </div>
+    </SectionsContext.Provider>
   );
 }
 
@@ -1529,11 +1586,35 @@ function Stat({ num, label }: { num: number | string; label: string }) {
   );
 }
 
-function Card({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
+/** The sale page's sections, in order (each Card's id). */
+const SECTION_IDS = ["status", "note", "orders", "share", "sale-details", "add-item", "items", "next-sale"];
+
+const SectionsContext = createContext<{ collapsed: Set<string>; toggle: (id: string) => void } | null>(null);
+
+/** One section of the sale page; its title collapses and expands it. The
+ * content stays mounted while collapsed, so anything typed in it is kept. */
+function Card({ title, id, children }: { title: string; id: string; children: React.ReactNode }) {
+  const sections = useContext(SectionsContext);
+  const open = !sections?.collapsed.has(id);
   return (
     <div id={id} className="bg-white border-2 border-cardboard-dark rounded-xl p-4 mb-4 scroll-mt-4">
-      <h3 className="text-sm font-bold mb-3">{title}</h3>
-      {children}
+      <h3 className="text-sm font-bold">
+        <button
+          type="button"
+          onClick={() => sections?.toggle(id)}
+          aria-expanded={open}
+          aria-controls={`${id}-body`}
+          className="w-full flex items-center justify-between gap-2 text-left"
+        >
+          <span>{title}</span>
+          <span className="opacity-75 shrink-0">
+            <ChevronIcon up={open} />
+          </span>
+        </button>
+      </h3>
+      <div id={`${id}-body`} hidden={!open} className="mt-3">
+        {children}
+      </div>
     </div>
   );
 }
