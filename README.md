@@ -444,6 +444,20 @@ Buy Now button that fails. **Send me a test email** on the Account page sends on
 shows ZeptoMail's exact error if it doesn't go out. Vercel's Preview deployments only get
 variables ticked for "Preview".
 
+## Security notes
+
+- Every table has row-level security; sellers only see their own sales, items, holds, orders
+  and stats, and billing/orders/holds are written only by the server.
+- Plan checks (`private.seller_access`) live in a schema Supabase's API doesn't expose;
+  `public.seller_access` only answers for your own account, and the public sale page asks
+  `sale_offers_holds(sale_id)` instead.
+- Photo uploads: images only (JPEG, PNG, WebP, GIF, HEIC/HEIF, AVIF), 15 MB max (set on the
+  `item-photos` bucket by `schema.sql`).
+- Security headers on every response (`next.config.mjs`): no framing by other sites,
+  `nosniff`, a strict referrer policy, and only the browser features the app uses.
+  The unused `/_next/image` optimiser accepts no remote images.
+- Secrets are never committed: `.env.local` is git-ignored; `.env.example` lists the settings.
+
 ## Photos
 
 Photos are scaled in the browser to at most 1,600 px on the long side and saved as JPEG before

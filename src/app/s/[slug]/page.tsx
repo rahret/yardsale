@@ -113,7 +113,7 @@ export default async function PublicSalePage({ params, searchParams }: Props) {
       .select("*, item_photos(*)")
       .eq("sale_id", found.sale.id)
       .order("created_at", { ascending: false }),
-    supabase.rpc("seller_access", { p_user: found.sale.owner_id }),
+    supabase.rpc("sale_offers_holds", { p_sale_id: found.sale.id }),
   ]);
 
   return (
@@ -124,7 +124,7 @@ export default async function PublicSalePage({ params, searchParams }: Props) {
         initialItems={items || found.items}
         saleDays={found.days}
         initialItemId={searchParams.item}
-        holdsAndBuyNow={access === "full"}
+        holdsAndBuyNow={access === true}
         onlinePayments={serverSetup().paymentsMissing.length === 0}
       />
     </>

@@ -185,3 +185,28 @@ $$;
 reset role;
 
 \echo 'plans.test.sql: all checks passed'
+
+-- ---- nobody can look up another seller's plan ---------------------------------
+set role anon;
+do $$
+begin
+  begin
+    perform public.seller_access('00000000-0000-0000-0000-0000000000b3');
+    raise exception 'a visitor called seller_access';
+  exception when insufficient_privilege then null;
+  end;
+  assert public.sale_offers_holds('b2000000-0000-0000-0000-000000000001') = false, 'trial sale: no holds';
+  assert public.sale_offers_holds('00000000-0000-0000-0000-000000000000') = false, 'unknown sale: no holds';
+end;
+$$;
+reset role;
+set test.uid = '00000000-0000-0000-0000-0000000000b2';
+set role authenticated;
+do $$
+begin
+  assert public.seller_access('00000000-0000-0000-0000-0000000000b2') = 'trial', 'a seller sees their own plan';
+  assert public.seller_access('00000000-0000-0000-0000-0000000000b3') is null, 'but not someone else''s';
+end;
+$$;
+reset role;
+\echo 'plans.test.sql: seller_access is private'
