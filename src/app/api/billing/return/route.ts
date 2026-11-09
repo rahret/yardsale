@@ -11,7 +11,7 @@ import { safeRedirectPath } from "@/lib/utils";
 // Applies the result right away (the webhook does the same, whichever comes
 // first) so the new plan shows as soon as they land.
 export async function GET(request: NextRequest) {
-  const origin = requestOrigin();
+  const origin = await requestOrigin();
   const params = request.nextUrl.searchParams;
   const to = safeRedirectPath(params.get("to"), "/dashboard/account#plan");
   const sessionId = params.get("session_id") || "";
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient();
   const {
     data: { user },
-  } = await createClient().auth.getUser();
+  } = await (await createClient()).auth.getUser();
   let notice = "success";
   if (stripe && admin && user && sessionId.startsWith("cs_")) {
     try {

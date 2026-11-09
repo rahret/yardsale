@@ -10,7 +10,7 @@ import { siteOrigin } from "@/lib/utils";
 // seller's own login address and reports exactly what went wrong if it didn't
 // go out (a missing setting, or ZeptoMail's own error message).
 export async function POST() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

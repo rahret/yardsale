@@ -12,7 +12,7 @@ let lastLookup = 0;
 export async function POST(request: NextRequest) {
   const {
     data: { user },
-  } = await createClient().auth.getUser();
+  } = await (await createClient()).auth.getUser();
   if (!user) return NextResponse.json({ error: "You're signed out — log in again." }, { status: 401 });
   if (!(await allow("addressVerify", user.id))) return NextResponse.json({ error: TOO_MANY }, { status: 429 });
 

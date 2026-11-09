@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
 
 // The seller's stats for one sale: visits, where they came from, the most
 // viewed items, holds and sales.
-export default async function SaleStatsPage({ params }: { params: { saleId: string } }) {
-  const supabase = createClient();
+export default async function SaleStatsPage({ params: paramsIn }: { params: Promise<{ saleId: string }> }) {
+  const params = await paramsIn;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

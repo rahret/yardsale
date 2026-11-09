@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const requested = num("radius");
   const radius = (RADIUS_OPTIONS as readonly number[]).includes(requested ?? -1) ? requested : 25;
 
-  const result = await searchListings(createClient(), {
+  const result = await searchListings(await createClient(), {
     lat,
     lng,
     radiusMiles: radius,

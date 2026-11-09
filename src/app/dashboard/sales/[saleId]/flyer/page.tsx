@@ -9,8 +9,9 @@ import type { Item, SaleDay } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 // The flyer builder for one of the seller's sales.
-export default async function FlyerPage({ params }: { params: { saleId: string } }) {
-  const supabase = createClient();
+export default async function FlyerPage({ params: paramsIn }: { params: Promise<{ saleId: string }> }) {
+  const params = await paramsIn;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -27,7 +28,7 @@ export default async function FlyerPage({ params }: { params: { saleId: string }
   return (
     <FlyerBuilder
       saleId={sale.id}
-      qrUrl={saleLink(requestOrigin(), sale.slug, { src: "flyer" })}
+      qrUrl={saleLink(await requestOrigin(), sale.slug, { src: "flyer" })}
       sale={{ name: sale.name || "", tagline: sale.tagline, street: sale.street || "", city: sale.city || "" }}
       dateLines={dateLines}
       categories={topCategories((items || []) as Item[], 4)}

@@ -8,12 +8,12 @@ import { syncConnectAccount } from "@/lib/payouts";
 // Where Stripe sends the seller after onboarding. Refreshes their account's
 // status right away (the account.updated webhook also keeps it current).
 export async function GET() {
-  const origin = requestOrigin();
+  const origin = await requestOrigin();
   const stripe = getStripe();
   const admin = createAdminClient();
   const {
     data: { user },
-  } = await createClient().auth.getUser();
+  } = await (await createClient()).auth.getUser();
   if (stripe && admin && user) {
     const { data: billing } = await admin
       .from("account_billing")

@@ -18,8 +18,9 @@ const NOTICES: Record<string, string> = {
 // First-time sellers land here after confirming their email: pick a plan
 // (the free trial or a Sale Pass), then a short wizard creates their first
 // sale.
-export default async function WelcomePage({ searchParams }: { searchParams: { billing?: string } }) {
-  const supabase = createClient();
+export default async function WelcomePage({ searchParams: searchIn }: { searchParams: Promise<{ billing?: string }> }) {
+  const searchParams = await searchIn;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

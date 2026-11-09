@@ -5,6 +5,6 @@ import { createClient } from "@/lib/supabase/server";
 export async function isSignedIn(): Promise<boolean> {
   const {
     data: { user },
-  } = await createClient().auth.getUser();
+  } = await (await createClient()).auth.getUser();
   return !!user;
 }

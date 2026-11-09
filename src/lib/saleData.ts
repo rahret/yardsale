@@ -15,7 +15,7 @@ export interface PublicSale {
  * would see it. Wrapped in React's cache() so generateMetadata and the page
  * share one fetch per request. Returns null for unknown or draft sales. */
 export const loadPublicSale = cache(async (slug: string): Promise<PublicSale | null> => {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: sale } = await supabase.from("sales").select("*").eq("slug", slug).maybeSingle();
   if (!sale) return null;
 
@@ -27,8 +27,8 @@ export const loadPublicSale = cache(async (slug: string): Promise<PublicSale | n
 });
 
 /** Absolute origin for links in previews (social sites need absolute URLs). */
-export function requestOrigin(): string {
-  const h = headers();
+export async function requestOrigin(): Promise<string> {
+  const h = await headers();
   const host = h.get("x-forwarded-host") || h.get("host") || "localhost:3000";
   const proto = h.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
   return siteOrigin(`${proto}://${host}`);

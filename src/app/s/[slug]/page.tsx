@@ -9,9 +9,10 @@ import { serverSetup } from "@/lib/serverSetup";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: { slug: string }; searchParams: { item?: string } };
+type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ item?: string }> };
 
-export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const [params, searchParams] = await Promise.all([props.params, props.searchParams]);
   const data = await loadPublicSale(params.slug);
   if (!data || data.sale.status === "draft") {
     return { title: "Yard Sale QR", robots: { index: false } };
@@ -20,7 +21,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     return { title: `${data.sale.name} has ended`, robots: { index: false } };
   }
 
-  const origin = requestOrigin();
+  const origin = await requestOrigin();
   const item = searchParams.item ? data.items.find((i) => i.id === searchParams.item) : undefined;
   const { title, description } = item
     ? itemPreview(data.sale, data.days, item)
@@ -47,7 +48,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   };
 }
 
-export default async function PublicSalePage({ params, searchParams }: Props) {
+export default async function PublicSalePage(props: Props) {
+  const [params, searchParams] = await Promise.all([props.params, props.searchParams]);
   const [found, signedIn] = await Promise.all([loadPublicSale(params.slug), isSignedIn()]);
 
   if (!found) {
@@ -69,7 +71,7 @@ export default async function PublicSalePage({ params, searchParams }: Props) {
   if (found.sale.archived_at) {
     // the seller tucked this sale away: say it's over, and point old signs and
     // links at their current sale if they have one (published sales are public)
-    const { data: next } = await createClient()
+    const { data: next } = await (await createClient())
       .from("sales")
       .select("slug, name")
       .eq("owner_id", found.sale.owner_id)
@@ -105,7 +107,7 @@ export default async function PublicSalePage({ params, searchParams }: Props) {
 
   // sweep any stale reservations so the page is accurate on first load; the
   // cached items above may predate the sweep, so refetch if anything expired
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.rpc("sweep_expired_reservations", { p_sale_id: found.sale.id });
   const [{ data: items }, { data: access }] = await Promise.all([
     supabase

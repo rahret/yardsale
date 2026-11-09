@@ -6,7 +6,8 @@ import { refundOrder } from "@/lib/stripeEvents";
 
 // Seller refunds a paid order (no-show, wrong item, changed mind). The money
 // comes back out of their payout; the item goes back on sale.
-export async function POST(_request: Request, { params }: { params: { orderId: string } }) {
+export async function POST(_request: Request, { params: paramsIn }: { params: Promise<{ orderId: string }> }) {
+  const params = await paramsIn;
   const order = await ownedOrder(params.orderId);
   if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
   if (order.status !== "paid" && order.status !== "picked_up") {

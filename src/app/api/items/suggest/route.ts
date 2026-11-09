@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
   const {
     data: { user },
-  } = await createClient().auth.getUser();
+  } = await (await createClient()).auth.getUser();
   if (!user) return fail("You're signed out — refresh the page and log in again.", 401);
 
   const anthropic = snapAiEnabled() ? getAnthropic() : null;

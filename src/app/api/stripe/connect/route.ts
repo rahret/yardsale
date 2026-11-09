@@ -10,7 +10,7 @@ import { requestOrigin } from "@/lib/saleData";
 // refresh_url, used when an onboarding link expires) send them to Stripe's
 // hosted onboarding to add their bank and identity details.
 async function startOnboarding(request: NextRequest, allowCreate: boolean) {
-  const origin = requestOrigin();
+  const origin = await requestOrigin();
   const fail = (reason: string, detail?: string) => onboardingFailed(origin, reason, detail);
 
   const stripe = getStripe();
@@ -19,7 +19,7 @@ async function startOnboarding(request: NextRequest, allowCreate: boolean) {
 
   const {
     data: { user },
-  } = await createClient().auth.getUser();
+  } = await (await createClient()).auth.getUser();
   if (!user) return NextResponse.redirect(`${origin}/login`, { status: 303 });
 
   const { data: billing } = await admin
@@ -69,10 +69,10 @@ function onboardingFailed(origin: string, reason: string, detail?: string) {
   return NextResponse.redirect(url, { status: 303 });
 }
 
-function stripeFailure(e: unknown) {
+async function stripeFailure(e: unknown) {
   console.error("Stripe onboarding failed", e);
   const detail = e instanceof Stripe.errors.StripeError ? e.message : undefined;
-  return onboardingFailed(requestOrigin(), "error", detail);
+  return onboardingFailed(await requestOrigin(), "error", detail);
 }
 
 export async function POST(request: NextRequest) {
