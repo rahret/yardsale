@@ -166,6 +166,82 @@ $$;
 
 grant execute on function private.seller_access(uuid) to anon, authenticated, service_role;
 
+-- ----------------------------------------------------------------------------
+-- Rate limits: a fixed-window counter per key (e.g. "checkout:<hashed IP>").
+-- private.hit() counts one use and says whether it's still within the limit.
+-- Keys hold hashed IPs or user ids, never raw addresses. Old windows are
+-- cleaned up as it goes. The server calls it through public.rate_limit_hit
+-- (service role only); database functions call private.hit directly.
+-- ----------------------------------------------------------------------------
+create table if not exists private.rate_limits (
+  key text not null,
+  window_start timestamptz not null,
+  hits int not null default 0,
+  primary key (key, window_start)
+);
+revoke all on private.rate_limits from public, anon, authenticated;
+
+create or replace function private.hit(p_key text, p_limit int, p_window_seconds int)
+returns boolean
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  v_start timestamptz := to_timestamp(floor(extract(epoch from now()) / p_window_seconds) * p_window_seconds);
+  v_hits int;
+begin
+  insert into private.rate_limits (key, window_start, hits) values (left(p_key, 200), v_start, 1)
+  on conflict (key, window_start) do update set hits = private.rate_limits.hits + 1
+  returning hits into v_hits;
+  if random() < 0.01 then
+    delete from private.rate_limits where window_start < now() - interval '2 days';
+  end if;
+  return v_hits <= p_limit;
+end;
+$$;
+revoke all on function private.hit(text, int, int) from public, anon, authenticated;
+
+create or replace function public.rate_limit_hit(p_key text, p_limit int, p_window_seconds int)
+returns boolean
+language sql
+security definer set search_path = public
+as $$
+  select private.hit(p_key, p_limit, p_window_seconds);
+$$;
+revoke all on function public.rate_limit_hit(text, int, int) from public, anon, authenticated;
+grant execute on function public.rate_limit_hit(text, int, int) to service_role;
+
+-- The visitor's IP for database functions called straight from the browser.
+-- Supabase sits behind Cloudflare, which sets cf-connecting-ip itself (a
+-- visitor can't fake it), so that comes first, then x-real-ip. Only if
+-- neither is there does it fall back to the first X-Forwarded-For entry,
+-- which a visitor could set themselves; the last entry isn't used because
+-- behind a proxy it can be the proxy's own address, the same for everyone.
+create or replace function private.client_ip()
+returns text
+language plpgsql
+stable
+as $$
+declare
+  v_headers json;
+begin
+  begin
+    v_headers := nullif(current_setting('request.headers', true), '')::json;
+  exception when others then
+    return null;
+  end;
+  if v_headers is null then
+    return null;
+  end if;
+  return coalesce(
+    nullif(trim(v_headers ->> 'cf-connecting-ip'), ''),
+    nullif(trim(v_headers ->> 'x-real-ip'), ''),
+    nullif(trim(split_part(coalesce(v_headers ->> 'x-forwarded-for', ''), ',', 1)), '')
+  );
+end;
+$$;
+revoke all on function private.client_ip() from public, anon, authenticated;
+
 create or replace function public.seller_access(p_user uuid)
 returns text
 language sql
@@ -746,7 +822,13 @@ security definer set search_path = public
 as $$
 declare
   v_src text := lower(coalesce(p_src, ''));
+  v_ip text := private.client_ip();
 begin
+  -- at most 30 counted visits per visitor per sale per hour (the page already
+  -- counts once per browser session; this stops scripts inflating stats)
+  if v_ip is not null and not private.hit('visit:' || md5(v_ip) || ':' || p_sale_id, 30, 3600) then
+    return;
+  end if;
   if v_src not in ('qr', 'share', 'facebook', 'group', 'craigslist', 'text', 'email', 'friend', 'directory', 'tag', 'flyer') then
     v_src := 'direct';
   end if;
@@ -790,7 +872,14 @@ returns void
 language plpgsql
 security definer set search_path = public
 as $$
+declare
+  v_ip text := private.client_ip();
 begin
+  -- at most 300 item opens per visitor per hour (each item counts once per
+  -- browser session, so real browsing stays far below this)
+  if v_ip is not null and not private.hit('view:' || md5(v_ip), 300, 3600) then
+    return;
+  end if;
   insert into public.item_views (sale_id, item_id)
   select i.sale_id, i.id
   from public.items i
@@ -1444,7 +1533,6 @@ declare
   v_sale public.sales%rowtype;
   v_norm_phone text;
   v_minutes int;
-  v_headers json;
   v_ip text;
   v_email text;
   v_reserved_at timestamptz := now();
@@ -1466,18 +1554,8 @@ begin
     return jsonb_build_object('success', false, 'error', 'Enter a valid 10-digit phone number.');
   end if;
 
-  -- Supabase passes the HTTP request headers to Postgres; prefer the
-  -- CDN-provided client IP, falling back to the first X-Forwarded-For hop.
-  begin
-    v_headers := nullif(current_setting('request.headers', true), '')::json;
-  exception when others then
-    v_headers := null;
-  end;
-  v_ip := nullif(trim(split_part(coalesce(
-    v_headers ->> 'cf-connecting-ip',
-    v_headers ->> 'x-forwarded-for',
-    v_headers ->> 'x-real-ip',
-    ''), ',', 1)), '');
+  -- the visitor's IP (see private.client_ip)
+  v_ip := private.client_ip();
 
   select * into v_item from public.items where id = p_item_id for update;
   if not found then

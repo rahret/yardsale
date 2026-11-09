@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { TOO_MANY, allow, clientIp } from "@/lib/rateLimit";
 import { createClient } from "@/lib/supabase/server";
 import { searchListings } from "@/lib/directorySearch";
 import { RADIUS_OPTIONS } from "@/lib/directory";
@@ -7,6 +8,9 @@ import { RADIUS_OPTIONS } from "@/lib/directory";
 // location is required: buyers only ever see sales near a place they chose,
 // never the whole directory.
 export async function GET(request: NextRequest) {
+  if (!(await allow("search", clientIp(request.headers)))) {
+    return NextResponse.json({ error: TOO_MANY }, { status: 429 });
+  }
   const q = request.nextUrl.searchParams;
   const num = (k: string) => {
     const v = q.get(k);
