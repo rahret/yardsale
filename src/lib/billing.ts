@@ -47,7 +47,7 @@ export const LOCKED_IN_TRIAL = [
   "Listing in Find yard sales",
 ] as const;
 
-/** Mirrors public.seller_access in schema.sql (the database enforces it). */
+/** Mirrors private.seller_access in schema.sql (the database enforces it). */
 export type Access = "full" | "trial" | "none";
 
 /** Stripe statuses that mean a subscription is still going. */

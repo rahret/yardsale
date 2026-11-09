@@ -140,7 +140,14 @@ grant execute on function public.delete_my_account() to authenticated;
 -- Security definer so public pages and the directory can ask without seeing
 -- anyone's billing row.
 -- ----------------------------------------------------------------------------
-create or replace function public.seller_access(p_user uuid)
+-- The real check lives in the "private" schema, which Supabase's API doesn't
+-- expose: database functions and triggers can use it for anyone, but people
+-- can't call it to look up another seller's plan. public.seller_access only
+-- answers for your own account (or the server).
+create schema if not exists private;
+grant usage on schema private to anon, authenticated, service_role;
+
+create or replace function private.seller_access(p_user uuid)
 returns text
 language sql
 stable
@@ -157,7 +164,23 @@ as $$
   left join public.account_billing b on b.user_id = p_user;
 $$;
 
-grant execute on function public.seller_access(uuid) to anon, authenticated, service_role;
+grant execute on function private.seller_access(uuid) to anon, authenticated, service_role;
+
+create or replace function public.seller_access(p_user uuid)
+returns text
+language sql
+stable
+security invoker set search_path = public
+as $$
+  select case
+    when current_user in ('anon', 'authenticated') and p_user is distinct from auth.uid() then null
+    else private.seller_access(p_user)
+  end;
+$$;
+
+revoke all on function public.seller_access(uuid) from public, anon;
+grant execute on function public.seller_access(uuid) to authenticated, service_role;
+
 
 -- ----------------------------------------------------------------------------
 -- sale_passes: one row per Sale Pass purchase (keyed by the Stripe Checkout
@@ -320,6 +343,21 @@ drop policy if exists "Owners can delete their own sales" on public.sales;
 create policy "Owners can delete their own sales"
   on public.sales for delete
   using (auth.uid() = owner_id);
+
+-- What the public sale page needs to know about the seller's plan: whether
+-- their sale offers Holds and Buy Now (part of Pro and the Sale Pass).
+create or replace function public.sale_offers_holds(p_sale_id uuid)
+returns boolean
+language sql
+stable
+security definer set search_path = public
+as $$
+  select coalesce((select private.seller_access(s.owner_id) = 'full' from public.sales s
+                   where s.id = p_sale_id and s.status <> 'draft'), false);
+$$;
+
+grant execute on function public.sale_offers_holds(uuid) to anon, authenticated;
+
 
 -- ----------------------------------------------------------------------------
 -- sale_days: per-day open hours for a sale. Yard sales commonly run 1-4 days
@@ -798,7 +836,7 @@ begin
   select count(*) into v_item_views from public.item_views where sale_id = p_sale_id;
 
   v_result := jsonb_build_object(
-    'locked', public.seller_access(v_sale.owner_id) <> 'full',
+    'locked', private.seller_access(v_sale.owner_id) <> 'full',
     'timezone', v_tz,
     'visits', v_visits,
     'item_views', v_item_views + (select count(*) from public.sale_visits where sale_id = p_sale_id and item_id is not null),
@@ -907,7 +945,7 @@ as $$
     from public.sales s
     where s.status = 'live'
       and s.listed
-      and public.seller_access(s.owner_id) = 'full'
+      and private.seller_access(s.owner_id) = 'full'
       -- only addresses that were found on the map (keeps made-up addresses out)
       and s.lat is not null and s.lng is not null
       and (p_category is null or exists (
@@ -1175,7 +1213,7 @@ begin
   if current_user not in ('anon', 'authenticated') then
     return new;
   end if;
-  v_access := public.seller_access(new.owner_id);
+  v_access := private.seller_access(new.owner_id);
 
   if tg_op = 'INSERT' then
     if v_access = 'none' then
@@ -1210,7 +1248,7 @@ begin
   if current_user not in ('anon', 'authenticated') then
     return new;
   end if;
-  select public.seller_access(s.owner_id) into v_access from public.sales s where s.id = new.sale_id;
+  select private.seller_access(s.owner_id) into v_access from public.sales s where s.id = new.sale_id;
   v_access := coalesce(v_access, 'none');
 
   if tg_op = 'INSERT' then
@@ -1456,7 +1494,7 @@ begin
     return jsonb_build_object('success', false, 'error', 'This item is first come, first served — come by the sale to buy it.');
   end if;
 
-  if public.seller_access((select owner_id from public.sales where id = v_item.sale_id)) <> 'full' then
+  if private.seller_access((select owner_id from public.sales where id = v_item.sale_id)) <> 'full' then
     return jsonb_build_object('success', false, 'error', 'This item is first come, first served — come by the sale to buy it.');
   end if;
 
@@ -1611,7 +1649,7 @@ begin
     or not exists (select 1 from public.sales where id = p_to and owner_id = v_owner) then
     raise exception 'Sale not found.' using errcode = 'P0001';
   end if;
-  if public.seller_access(v_owner) = 'none' then
+  if private.seller_access(v_owner) = 'none' then
     raise exception 'Start your free trial or choose a plan to add items.' using errcode = 'P0001';
   end if;
 
@@ -1658,6 +1696,21 @@ grant execute on function public.move_unsold_items(uuid, uuid) to authenticated;
 -- owner; public read is handled by the bucket being public).
 -- Upload path convention used by the app: {sale_id}/{item_id}/{random}-{filename}
 -- ============================================================================
+
+-- Only images, at most 15 MB each (the app shrinks photos to ~1,600 px JPEGs
+-- before upload; originals only get through if a phone's format can't be
+-- shrunk). Keeps the public bucket from hosting web pages or huge files.
+do $$
+begin
+  if to_regclass('storage.buckets') is not null then
+    update storage.buckets
+    set file_size_limit = 15 * 1024 * 1024,
+        allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp', 'image/gif',
+                                   'image/heic', 'image/heif', 'image/avif']
+    where id = 'item-photos';
+  end if;
+end;
+$$;
 
 -- NOTE: storage.objects.name and public.sales.name both exist, so inside this
 -- subquery an unqualified `name` resolves to sales.name (innermost scope),
