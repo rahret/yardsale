@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { TOO_MANY, allow, clientIp } from "@/lib/rateLimit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 import { requestOrigin } from "@/lib/saleData";
@@ -24,6 +25,8 @@ export async function POST(request: NextRequest) {
     console.error(`Buy Now is off: not set on the server: ${serverSetup().paymentsMissing.join(", ")}`);
     return unavailable("Online payment isn't switched on for this site yet — come by the sale to buy it.", 503);
   }
+  // each try creates an order and a Stripe checkout, so cap them per visitor
+  if (!(await allow("checkout", clientIp(request.headers), admin))) return unavailable(TOO_MANY, 429);
 
   const body = await request.json().catch(() => null);
   const itemId = typeof body?.itemId === "string" ? body.itemId : null;

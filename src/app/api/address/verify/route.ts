@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { TOO_MANY, allow } from "@/lib/rateLimit";
 import { createClient } from "@/lib/supabase/server";
 import { verifyAddress } from "@/lib/geocode";
 import { addressFormatError, normalizeAddress } from "@/lib/address";
@@ -13,6 +14,7 @@ export async function POST(request: NextRequest) {
     data: { user },
   } = await createClient().auth.getUser();
   if (!user) return NextResponse.json({ error: "You're signed out — log in again." }, { status: 401 });
+  if (!(await allow("addressVerify", user.id))) return NextResponse.json({ error: TOO_MANY }, { status: 429 });
 
   const body = await request.json().catch(() => null);
   const address = normalizeAddress({

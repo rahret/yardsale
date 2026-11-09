@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { allow, clientIp } from "@/lib/rateLimit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyBuyerHoldPlaced, notifyHoldPlaced } from "@/lib/alerts";
 
@@ -15,6 +16,9 @@ export async function POST(request: NextRequest) {
   if (!admin) {
     console.error("Hold emails not sent: SUPABASE_SERVICE_ROLE_KEY isn't set on the server");
     return NextResponse.json({ sent: false });
+  }
+  if (!(await allow("holdAlert", clientIp(request.headers), admin))) {
+    return NextResponse.json({ sent: false }, { status: 429 });
   }
   const [seller, buyer] = await Promise.all([notifyHoldPlaced(admin, itemId), notifyBuyerHoldPlaced(admin, itemId)]);
   return NextResponse.json({ sent: seller === "seller notified", buyerEmailed: buyer === "buyer notified" });

@@ -457,6 +457,13 @@ variables ticked for "Preview".
   `nosniff`, a strict referrer policy, and only the browser features the app uses.
   The unused `/_next/image` optimiser accepts no remote images.
 - Secrets are never committed: `.env.local` is git-ignored; `.env.example` lists the settings.
+- Rate limits (counted in the database, keyed by a hash of the IP or user id, never the raw
+  address; `src/lib/rateLimit.ts`, `private.hit`): Buy Now checkouts 15/hour per visitor,
+  hold alert calls 30/hour, place lookups 30/min, directory searches 120/min, address checks
+  30 per 10 min and test emails 1/min and 10/day per seller; visits are counted at most 30 per
+  visitor per sale per hour and item views 300 per visitor per hour. Holds keep their own
+  limits (3 per device per sale, 10 per hour). The database takes the visitor's IP from
+  Cloudflare's header (which visitors can't fake) before any they could send themselves.
 
 ## Photos
 
