@@ -459,7 +459,7 @@ variables ticked for "Preview".
 - Secrets are never committed: `.env.local` is git-ignored; `.env.example` lists the settings.
 - Dependencies: Next.js 15.5 and React 19, with `npm audit --omit=dev` at 0 known
   vulnerabilities (build-only packages are pinned to patched versions under `overrides` in
-  `package.json`). Needs Node.js 20.9 or newer (for `sharp`).
+  `package.json`). Needs Node.js 20.9 or newer (for `sharp`); production and CI run Node 24.
 - Rate limits (counted in the database, keyed by a hash of the IP or user id, never the raw
   address; `src/lib/rateLimit.ts`, `private.hit`): Buy Now checkouts 15/hour per visitor,
   hold alert calls 30/hour, place lookups 30/min, directory searches 120/min, address checks
